@@ -55,7 +55,7 @@ export function HeroSection() {
           <Button size="lg" className="h-12 px-8 rounded-full text-base w-full sm:w-auto">
             <Link href="/dashboard">Start Auditing Free</Link>
           </Button>
-          <Button  size="lg" variant="outline" className="h-12 px-8 rounded-full text-base w-full sm:w-auto dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900">
+          <Button size="lg" variant="outline" className="h-12 px-8 rounded-full text-base w-full sm:w-auto dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900">
             <Link href="#demo">Book a Demo</Link>
           </Button>
         </motion.div>

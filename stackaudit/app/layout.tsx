@@ -20,49 +20,81 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://stackaudit.ai"),
+
   title: {
-    default: "StackAudit | AI Spend Optimization for Startups",
+    default: "StackAudit — AI Spend Audits for Engineering Teams",
     template: "%s | StackAudit",
   },
+
   description:
-    "Automatically audit your team's AI tool subscriptions, discover unused seats, and uncover thousands in potential savings without slowing down engineering.",
+    "Audit your AI tooling spend, identify unused subscriptions, compare plans, and uncover savings opportunities across ChatGPT, Claude, Cursor, Copilot, Gemini, and more.",
+
   keywords: [
-    "AI Spend",
-    "SaaS Audit",
-    "Cost Optimization",
-    "Startup Finance",
-    "Engineering Operations",
+    "AI spend audit",
+    "ChatGPT enterprise pricing",
+    "Claude pricing",
+    "Cursor pricing",
+    "engineering budget optimization",
+    "AI SaaS cost management",
+    "developer tooling audit",
+    "startup infrastructure savings",
   ],
-  authors: [{ name: "StackAudit Team" }],
+
+  authors: [{ name: "StackAudit" }],
   creator: "StackAudit",
+  publisher: "StackAudit",
+  category: "technology",
+
+  alternates: {
+    canonical: "/",
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+
   openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: "https://stackaudit.app",
-    title: "StackAudit | Regain Control of Your AI Tool Spend",
+    title: "StackAudit — Optimize Your AI Stack Spend",
     description:
-      "Stop paying for idle Copilot seats and unused ChatGPT Plus accounts. StackAudit automatically discovers, tracks, and optimizes your company's AI subscriptions.",
+      "Discover where your engineering team is overspending on AI subscriptions and infrastructure.",
+
+    url: "https://stackaudit.ai",
     siteName: "StackAudit",
+    locale: "en_US",
+    type: "website",
+
     images: [
       {
-        url: "https://stackaudit.app/og-image.png",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "StackAudit OG Image",
+        alt: "StackAudit AI Spend Audit Dashboard Preview",
       },
     ],
   },
+
   twitter: {
     card: "summary_large_image",
-    title: "StackAudit | AI Spend Optimization for Startups",
+    title: "StackAudit — AI Spend Audits",
     description:
-      "Automatically audit your team's AI tool subscriptions and uncover thousands in potential savings.",
-    images: ["https://stackaudit.app/og-image.png"],
+      "Find wasted AI spend across ChatGPT, Claude, Cursor, Copilot, Gemini, and more.",
+
     creator: "@stackaudit",
+    images: ["/og-image.png"],
   },
+
   icons: {
     icon: "/favicon.ico",
-    shortcut: "/favicon-16x16.png",
+    shortcut: "/favicon.ico",
     apple: "/apple-touch-icon.png",
   },
   manifest: "/site.webmanifest",
@@ -74,14 +106,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
-      suppressHydrationWarning
-    >
-      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-950 dark:bg-black dark:text-zinc-50 font-sans selection:bg-blue-500/30">
+    <html lang="en" suppressHydrationWarning>
+      <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
       </body>
     </html>
   );
 }
+
