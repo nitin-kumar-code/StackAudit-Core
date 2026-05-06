@@ -15,7 +15,7 @@ export function CtaSection() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link href="/dashboard">
             <Button size="lg" className="h-14 px-10 rounded-full text-lg w-full sm:w-auto">
-              Start Your Free Audit
+             Run Free AI Spend Audit
             </Button>
           </Link>
         </div>

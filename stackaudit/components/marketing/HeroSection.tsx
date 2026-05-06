@@ -43,9 +43,8 @@ export function HeroSection() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="mx-auto max-w-2xl text-lg text-zinc-600 dark:text-zinc-400 mb-10 leading-relaxed"
         >
-          Connect your identity provider in minutes. StackAudit automatically maps your organization's AI subscriptions, tracks actual usage, and reclaims inactive licenses without slowing down engineering.
+        Analyze your team's AI subscriptions, uncover inactive seats, and identify cheaper plans before your next renewal cycle.
         </motion.p>
-
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
