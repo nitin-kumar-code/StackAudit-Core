@@ -10,6 +10,9 @@ import ToolDetailsStep from './ToolDetailsStep';
 import SummaryStep from './SummaryStep';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useRouter } from 'next/navigation';
+import router from 'next/router';
+import { id } from 'zod/v4/locales';
 
 const steps = [
   { id: 'company', title: 'Company Info' },
@@ -84,7 +87,7 @@ export default function AuditForm() {
        setCurrentStep(steps.length - 1);
     } else {
        console.log('Final Data:', data);
-       alert('Audit saved successfully!');
+       router.push(`/results/${id}`);
        localStorage.removeItem('auditFormData');
        methods.reset();
        setCurrentStep(0);
@@ -146,24 +149,13 @@ export default function AuditForm() {
                 type="button"
                 variant="outline"
                 onClick={handlePrev}
-                disabled={currentStep === 0 || currentStep === steps.length - 1}
+                disabled={currentStep === 0}
               >
                 Back
               </Button>
               
-              {currentStep < steps.length - 2 ? (
-                <Button type="button" onClick={handleNext}>
-                  Next
-                </Button>
-              ) : currentStep === steps.length - 2 ? (
-                <Button type="button" onClick={handleNext}>
-                  Review
-                </Button>
-              ) : (
-                <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white">
-                  Submit Audit
-                </Button>
-              )}
+              {currentStep < steps.length - 1 ? ( <Button type="button" onClick={handleNext}> {currentStep === steps.length - 2 ? "Review" : "Next"} </Button> ) : ( <Button type="submit" className="bg-green-600 hover:bg-green-700 text-white" > Submit Audit </Button> )}
+              
             </div>
           </form>
         </FormProvider>
