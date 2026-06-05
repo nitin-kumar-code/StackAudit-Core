@@ -93,7 +93,7 @@ export function analyzeAudit(input: EngineInput): EngineResult {
         const monthlySavings = (matchedPlan.pricePerSeatMonthly - matchedPlan.pricePerSeatAnnual) * details.seats;
         recommendations.push({
           id: generateId(),
-          type: 'annual_commitment',
+          type: 'annual-billing' as RecommendationType,
           tool: toolName,
           title: `Switch to Annual Billing for ${toolName}`,
           description: `Switching from monthly to annual billing for ${details.seats} seats can reduce your per-seat cost from $${matchedPlan.pricePerSeatMonthly} to $${matchedPlan.pricePerSeatAnnual}.`,
