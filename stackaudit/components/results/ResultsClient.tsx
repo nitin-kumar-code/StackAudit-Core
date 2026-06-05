@@ -6,13 +6,20 @@ import { EngineResult, SubscriptionData, SeatUsage } from "@/services/engine/typ
 import { OptimizedEmptyState } from "./OptimizedEmptyState";
 import { RecommendationCard } from "./RecommendationCard";
 import { SavingsOverview } from "./SavingsOverview";
-import { Loader2 } from "lucide-react";
+import { DashboardSkeleton } from "./DashboardSkeleton";
+import { AlertCircle, FileWarning, RefreshCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import Link from "next/link";
 
-export function ResultsClient() {
+export function ResultsClient({ reportId }: { reportId?: string }) {
   const [result, setResult] = useState<EngineResult | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
+  const fetchAndRunAudit = () => {
+    setIsLoading(true);
+    setError(null);
     // In a real app, we would fetch data from a DB or parse localStorage.
     // For this premium UI demonstration, we inject the realistic mock dataset
     // that triggers multiple complex rules (Enterprise downgrade, API arbitrage, etc).
@@ -40,21 +47,59 @@ export function ResultsClient() {
       ...Array(15).fill(0).map((_, i) => ({ seatId: `cl-${i+5}`, subscriptionId: 'sub-004', lastActiveDaysAgo: 10, tokensUsedMonthly: 25000 }))
     ];
 
-    // Simulate network delay for premium feel
     setTimeout(() => {
-      const auditResult = engine.runAudit(mockSubscriptions, mockUsage);
-      setResult(auditResult);
+      try {
+        // Here we simulate checking if the report is valid.
+        if (reportId && reportId !== 'demo' && reportId.length < 5) {
+          throw new Error("INVALID_REPORT");
+        }
+
+        const auditResult = engine.runAudit(mockSubscriptions, mockUsage);
+        setResult(auditResult);
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error("Unknown error"));
+      } finally {
+        setIsLoading(false);
+      }
     }, 1500);
+  };
 
-  }, []);
+  useEffect(() => {
+    fetchAndRunAudit();
+  }, [reportId]);
 
-  if (!result) {
+  if (error) {
+    if (error.message === "INVALID_REPORT") {
+      return (
+        <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center">
+          <FileWarning className="size-16 text-amber-500 mb-2" />
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Invalid Report ID</h2>
+          <p className="text-zinc-600 dark:text-zinc-400 max-w-md">
+            We couldn't find an audit report matching this ID. It may have expired or been deleted for privacy reasons.
+          </p>
+          <Button asChild className="mt-4">
+            <Link href="/audit">Start New Audit</Link>
+          </Button>
+        </div>
+      );
+    }
+
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
-        <Loader2 className="size-10 text-primary animate-spin" />
-        <h2 className="text-xl font-medium text-zinc-600 dark:text-zinc-400">Running Audit Engine...</h2>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4 text-center">
+        <AlertCircle className="size-16 text-red-500 mb-2" />
+        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Something went wrong</h2>
+        <p className="text-zinc-600 dark:text-zinc-400 max-w-md">
+          Our engine encountered an error while processing your data. 
+        </p>
+        <Button onClick={fetchAndRunAudit} variant="outline" className="mt-4">
+          <RefreshCcw className="size-4 mr-2" /> Try Again
+        </Button>
       </div>
     );
+  }
+
+  if (isLoading || !result) {
+    return <DashboardSkeleton />;
   }
 
   if (result.totalAnnualSavings === 0) {

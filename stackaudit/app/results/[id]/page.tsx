@@ -43,7 +43,7 @@ export default async function ResultsPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <ResultsClient />
+      <ResultsClient reportId={resolvedParams.id} />
     </div>
   );
 }
