@@ -49,6 +49,10 @@ export interface Recommendation {
 }
 
 export interface EngineResult {
+  currentMonthlySpend: number;
+  currentAnnualSpend: number;
+  optimizedMonthlySpend: number;
+  optimizedAnnualSpend: number;
   totalMonthlySavings: number;
   totalAnnualSavings: number;
   recommendations: Recommendation[];

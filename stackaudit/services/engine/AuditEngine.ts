@@ -29,6 +29,19 @@ export class AuditEngine {
   }
 
   public runAudit(subscriptions: SubscriptionData[], usageData: SeatUsage[]): EngineResult {
+    let currentMonthlySpend = 0;
+    let currentAnnualSpend = 0;
+    
+    for (const sub of subscriptions) {
+      if (sub.billingCycle === 'monthly') {
+        currentMonthlySpend += sub.seats * sub.costPerSeat;
+        currentAnnualSpend += sub.seats * sub.costPerSeat * 12;
+      } else {
+        currentMonthlySpend += (sub.seats * sub.costPerSeat) / 12;
+        currentAnnualSpend += sub.seats * sub.costPerSeat;
+      }
+    }
+
     const allRecommendations = [];
     
     // Process each rule independently
@@ -50,6 +63,10 @@ export class AuditEngine {
     const totalAnnualSavings = allRecommendations.reduce((sum, rec) => sum + rec.annualSavings, 0);
 
     return {
+      currentMonthlySpend,
+      currentAnnualSpend,
+      optimizedMonthlySpend: currentMonthlySpend - totalMonthlySavings,
+      optimizedAnnualSpend: currentAnnualSpend - totalAnnualSavings,
       totalMonthlySavings,
       totalAnnualSavings,
       recommendations: allRecommendations

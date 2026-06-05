@@ -24,7 +24,7 @@ export function SavingsOverview({ result }: { result: EngineResult }) {
     {
       name: "Current Run-Rate",
       spend: result.currentAnnualSpend,
-      color: "#f4f4f5", // zinc-100 (will override in dark mode via CSS or use static)
+      color: "#a1a1aa", // zinc-400 for better visibility in both modes
     },
     {
       name: "Optimized Run-Rate",
@@ -47,10 +47,11 @@ export function SavingsOverview({ result }: { result: EngineResult }) {
         </div>
       </div>
 
-      <div className="p-8 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black h-80">
+      <div className="flex flex-col p-8 rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black h-80">
         <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-widest mb-6">Annual Run-Rate Comparison</h3>
-        <ResponsiveContainer width="100%" height="80%">
-          <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
+        <div className="flex-1 min-h-0 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
             <XAxis type="number" hide />
             <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} className="text-xs font-medium dark:fill-zinc-400" width={140} />
             <Tooltip
@@ -73,6 +74,7 @@ export function SavingsOverview({ result }: { result: EngineResult }) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
