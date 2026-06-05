@@ -2,8 +2,11 @@ import { SubscriptionData, SeatUsage, ToolPricing, EngineResult, AuditRule } fro
 import { PRICING_CATALOG } from './data/pricing-catalog';
 import { UnusedSeatRule } from './rules/UnusedSeatRule';
 import { AnnualCommitRule } from './rules/AnnualCommitRule';
-import { DowngradeRule } from './rules/DowngradeRule';
 import { AlternativeRule } from './rules/AlternativeRule';
+import { DuplicationRule } from './rules/DuplicationRule';
+import { TeamPlanOverkillRule } from './rules/TeamPlanOverkillRule';
+import { EnterpriseUnnecessaryRule } from './rules/EnterpriseUnnecessaryRule';
+import { ApiArbitrageRule } from './rules/ApiArbitrageRule';
 
 export class AuditEngine {
   private rules: AuditRule[];
@@ -16,8 +19,11 @@ export class AuditEngine {
     // Initialize the rule pipeline
     this.rules = [
       new UnusedSeatRule(),
-      new DowngradeRule(),
+      new EnterpriseUnnecessaryRule(),
       new AnnualCommitRule(),
+      new TeamPlanOverkillRule(),
+      new DuplicationRule(),
+      new ApiArbitrageRule(),
       new AlternativeRule(),
     ];
   }
