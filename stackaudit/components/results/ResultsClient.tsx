@@ -13,6 +13,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { LeadCaptureForm } from "@/components/leads/LeadCaptureForm";
+import { PersonalizedSummary } from "./PersonalizedSummary";
 
 export function ResultsClient({ reportId }: { reportId?: string }) {
   const [result, setResult] = useState<EngineResult | null>(null);
@@ -114,6 +115,8 @@ export function ResultsClient({ reportId }: { reportId?: string }) {
       animate={{ opacity: 1 }}
       className="w-full max-w-5xl mx-auto"
     >
+      <PersonalizedSummary result={result} />
+      
       <SavingsOverview result={result} />
       
       <div className="space-y-6">
