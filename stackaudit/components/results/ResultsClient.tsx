@@ -8,9 +8,11 @@ import { RecommendationCard } from "./RecommendationCard";
 import { SavingsOverview } from "./SavingsOverview";
 import { DashboardSkeleton } from "./DashboardSkeleton";
 import { AlertCircle, FileWarning, RefreshCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { LeadCaptureForm } from "@/components/leads/LeadCaptureForm";
 
 export function ResultsClient({ reportId }: { reportId?: string }) {
   const [result, setResult] = useState<EngineResult | null>(null);
@@ -77,9 +79,9 @@ export function ResultsClient({ reportId }: { reportId?: string }) {
           <p className="text-zinc-600 dark:text-zinc-400 max-w-md">
             We couldn't find an audit report matching this ID. It may have expired or been deleted for privacy reasons.
           </p>
-          <Button asChild className="mt-4">
-            <Link href="/audit">Start New Audit</Link>
-          </Button>
+          <Link href="/audit" className={cn(buttonVariants(), "mt-4")}>
+            Start New Audit
+          </Link>
         </div>
       );
     }
@@ -121,6 +123,10 @@ export function ResultsClient({ reportId }: { reportId?: string }) {
         {result.recommendations.map((rec, index) => (
           <RecommendationCard key={rec.id} rec={rec} index={index} />
         ))}
+      </div>
+
+      <div className="mt-16 pt-8 border-t border-zinc-200 dark:border-zinc-800">
+        <LeadCaptureForm />
       </div>
     </motion.div>
   );

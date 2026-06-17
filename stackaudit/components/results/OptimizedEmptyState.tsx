@@ -1,7 +1,8 @@
 import { motion } from "framer-motion";
 import { CheckCircle2, TrendingUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 export function OptimizedEmptyState() {
   return (
@@ -20,12 +21,12 @@ export function OptimizedEmptyState() {
         We didn't detect any unused seats, redundant tools, or overpriced tiers. Your engineering team is operating at peak financial efficiency.
       </p>
       <div className="flex items-center justify-center gap-4">
-        <Button asChild variant="outline" className="h-12 px-8 rounded-full">
-          <Link href="/">Return Home</Link>
-        </Button>
-        <Button asChild className="h-12 px-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white">
-          <Link href="/audit"><TrendingUp className="mr-2 size-4" /> Run New Audit</Link>
-        </Button>
+        <Link href="/" className={cn(buttonVariants({ variant: "outline" }), "h-12 px-8 rounded-full")}>
+          Return Home
+        </Link>
+        <Link href="/audit" className={cn(buttonVariants(), "h-12 px-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white")}>
+          <TrendingUp className="mr-2 size-4" /> Run New Audit
+        </Link>
       </div>
     </motion.div>
   );
