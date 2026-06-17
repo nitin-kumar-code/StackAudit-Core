@@ -12,6 +12,7 @@ import { motion } from "framer-motion";
 const formSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   company_name: z.string().optional(),
+  website_url: z.string().optional(), // Honeypot field
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -29,6 +30,7 @@ export function LeadCaptureForm() {
     defaultValues: {
       email: "",
       company_name: "",
+      website_url: "",
     },
   });
 
@@ -116,6 +118,18 @@ export function LeadCaptureForm() {
             {...register("company_name")}
             placeholder="Acme Inc."
             className="flex h-10 w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-900 dark:text-white"
+          />
+        </div>
+
+        {/* Honeypot field - Bots will fill this out, humans won't see it */}
+        <div aria-hidden="true" className="opacity-0 absolute -z-10 w-0 h-0 pointer-events-none">
+          <label htmlFor="website_url">Website URL (leave blank if human)</label>
+          <input
+            id="website_url"
+            type="text"
+            {...register("website_url")}
+            tabIndex={-1}
+            autoComplete="off"
           />
         </div>
 

@@ -5,6 +5,7 @@ import { z } from 'zod';
 const leadSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
   company_name: z.string().optional(),
+  website_url: z.string().optional(), // Honeypot field
 });
 
 export async function POST(request: Request) {
@@ -19,7 +20,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, company_name } = parsedData.data;
+    const { email, company_name, website_url } = parsedData.data;
+
+    // Honeypot Trap: If the bot filled out the invisible website_url field,
+    // we silently reject the submission but return a 201 Created to fool the bot.
+    if (website_url) {
+      console.log('Bot trapped by honeypot! Email:', email);
+      return NextResponse.json({ success: true, id: 'bot-trapped' }, { status: 201 });
+    }
 
     // Insert into Supabase
     const { data, error } = await supabaseAdmin
