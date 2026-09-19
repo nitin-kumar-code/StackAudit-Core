@@ -15,6 +15,7 @@
     "@google/genai": "^2.8.0",
     "@hookform/resolvers": "^5.2.2",
     "@supabase/supabase-js": "^2.105.3",
+    "big.js": "^7.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/big.js": "^7.0.0",
     "@types/node": "^20.19.40",
     "@types/react": "^19",
     "@types/react-dom": "^19",

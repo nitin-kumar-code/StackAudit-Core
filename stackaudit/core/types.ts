@@ -26,6 +26,7 @@ export interface CanonicalUsageEvent {
 }
 
 export interface PricingRecord {
+  id: string;
   provider: string;
   model: string;
   inputPrice: string;
