@@ -21,6 +21,8 @@ export interface CanonicalUsageEvent {
     tags?: Record<string, string>;
   };
   providerReference: string;
+  rawResponseHash: string;
+  capturedAt?: Date;
 }
 
 export interface PricingRecord {

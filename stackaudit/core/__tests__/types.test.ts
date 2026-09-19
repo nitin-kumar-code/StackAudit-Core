@@ -10,7 +10,8 @@ describe('Domain Types', () => {
       timestamp: new Date(),
       usage: { inputTokens: 10, outputTokens: 20 },
       attribution: {},
-      providerReference: 'ref-1'
+      providerReference: "ref-1",
+      rawResponseHash: "hash-1"
     };
     expect(event.id).toBe('event-1');
   });
