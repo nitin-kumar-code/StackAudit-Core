@@ -13,7 +13,7 @@ export function CtaSection() {
           Join engineering leaders who use StackAudit to optimize their AI tool stack and reclaim their budget.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link href="/audit">
+          <Link href="/dashboard">
             <Button size="lg" className="h-14 px-10 rounded-full text-lg w-full sm:w-auto">
              Run Free AI Spend Audit
             </Button>
