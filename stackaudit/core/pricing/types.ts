@@ -5,7 +5,8 @@ export interface CostCalculationResult {
   totalCost: string;
   inputCost: string;
   outputCost: string;
-  cachedInputCost: string;
+  cacheReadCost: string;
+  cacheCreationCost: string;
 
   pricingRecordId?: string; // Optional if we are doing a hypothetical calculation without a DB record
   provider: string;
@@ -14,7 +15,8 @@ export interface CostCalculationResult {
   
   /** Token breakdown for explainability */
   billableInputTokens: number;
-  billableCachedTokens: number;
+  billableCacheReadTokens: number;
+  billableCacheCreationTokens: number;
   billableOutputTokens: number;
 }
 

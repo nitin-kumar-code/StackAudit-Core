@@ -6,7 +6,8 @@ export interface Provider {
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
-  cachedInputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 export interface CanonicalUsageEvent {
@@ -31,7 +32,8 @@ export interface PricingRecord {
   model: string;
   inputPrice: string;
   outputPrice: string;
-  cachedInputPrice?: string;
+  cacheReadPrice?: string;
+  cacheCreationPrice?: string;
   effectiveFrom: Date;
   effectiveUntil?: Date;
   source: string;

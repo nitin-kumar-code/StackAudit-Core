@@ -68,7 +68,8 @@ CREATE TABLE usage_events (
     timestamp TIMESTAMPTZ NOT NULL,
     input_tokens BIGINT NOT NULL,
     output_tokens BIGINT NOT NULL,
-    cached_input_tokens BIGINT,
+    cache_read_tokens BIGINT,
+    cache_creation_tokens BIGINT,
     -- provider_reference is our own deterministic synthetic key (e.g., hash of bucket_start + model + api_key_id + workspace_id)
     -- because providers like OpenAI/Anthropic return time-bucketed aggregates, not a single opaque request ID.
     provider_reference TEXT NOT NULL,
