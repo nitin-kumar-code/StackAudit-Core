@@ -78,7 +78,6 @@ export interface CostPerOutcomeResult {
   costPerOutcome: string | null;
   unpricedEventCount: number;
   
-  // V0 default is USD
   currency: string;
 }
 
@@ -91,14 +90,35 @@ export interface CostPerOutcomeDataPoint {
   unpricedEventCount: number;
 }
 
+export type AuditCategory = 'USAGE_SPIKE' | 'COST_DRIFT' | 'TOKEN_EFFICIENCY' | 'MODEL_MIX' | 'RETRY_PATTERN';
+export type Severity = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH';
+export type Confidence = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface AuditEvidence {
+  metric: string;
+  baseline?: number;
+  observed?: number;
+  changePercent?: number;
+  sampleSize?: number;
+  windowStart: string;
+  windowEnd: string;
+  supportingEventCount?: number;
+  details?: Record<string, any>;
+}
+
 export interface AuditFinding {
   id: string;
-  workloadId?: string;
-  category: string;
-  finding: string;
-  confidence: 'high' | 'medium' | 'low';
-  evidence: Record<string, any>;
-  timestamp: Date;
+  organizationId: string;
+  workloadId?: string | null;
+  category: AuditCategory;
+  severity: Severity;
+  title: string;
+  description: string;
+  confidence: Confidence;
+  evidence: AuditEvidence;
+  timeWindowStart: Date;
+  timeWindowEnd: Date;
+  detectedAt: Date;
 }
 
 export class ConflictError extends Error {
