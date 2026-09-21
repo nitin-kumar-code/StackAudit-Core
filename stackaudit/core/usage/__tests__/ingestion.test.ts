@@ -21,7 +21,7 @@ describe('Usage Ingestion Pipeline', () => {
       model: 'gpt-4',
       timestamp,
       usage: { inputTokens: 1000, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0 },
-      attribution: {},
+      attribution: { apiKeyId: 'key_abc' },
       providerReference: 'ref_1',
       rawResponseHash: 'hash_1',
       capturedAt: new Date()
@@ -46,24 +46,38 @@ describe('Usage Ingestion Pipeline', () => {
     const result = await ingestUsageEvents(events, 'org_1', catalog, mockSupabase);
 
     expect(result.successful).toBe(1);
+    
     expect(mockUpsert).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({
           organization_id: 'org_1',
-          calculated_cost: '0.016'
+          api_key_id: 'key_abc',
+          calculated_cost: '0.016',
+          is_unpriced: false
         })
       ]),
-      { onConflict: 'organization_id,provider,provider_reference' } // No ignoreDuplicates
+      { onConflict: 'organization_id,provider,provider_reference' }
     );
   });
 
-  it('increments pricingFailed and logs details when pricing missing', async () => {
+  it('increments pricingFailed, logs details, and inserts unpriced event', async () => {
+    mockUpsert.mockResolvedValueOnce({ error: null });
     const emptyCatalog = new InMemoryPricingCatalog([]);
     const result = await ingestUsageEvents(events, 'org_1', emptyCatalog, mockSupabase);
 
-    expect(result.successful).toBe(0);
+    expect(result.successful).toBe(1); // Row was inserted successfully
     expect(result.pricingFailed).toBe(1);
     expect(result.pricingFailedEvents.length).toBe(1);
     expect(result.pricingFailedEvents[0].provider).toBe('openai');
+    
+    expect(mockUpsert).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          is_unpriced: true,
+          calculated_cost: '0'
+        })
+      ]),
+      { onConflict: 'organization_id,provider,provider_reference' }
+    );
   });
 });

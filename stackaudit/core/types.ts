@@ -18,7 +18,6 @@ export interface CanonicalUsageEvent {
   usage: TokenUsage;
   attribution: {
     apiKeyId?: string;
-    workloadId?: string;
     tags?: Record<string, string>;
   };
   providerReference: string;
@@ -49,19 +48,47 @@ export interface Workload {
 
 export interface AttributionRule {
   id: string;
+  organizationId: string;
   workloadId: string;
-  ruleType: string;
-  ruleValue: string;
+  provider: string;
+  matchType: string;
+  matchValue: string;
   createdAt: Date;
 }
 
 export interface OutcomeEvent {
   id: string;
-  workloadId: string;
+  organizationId: string;
+  workloadId: string | null;
   outcomeType: string;
   timestamp: Date;
   count: number;
   metadata?: Record<string, any>;
+  idempotencyKey?: string;
+}
+
+export interface CostPerOutcomeResult {
+  workloadId: string;
+  outcomeType: string;
+  startTime: Date;
+  endTime: Date;
+
+  totalCost: string;
+  totalOutcomeCount: number;
+  costPerOutcome: string | null;
+  unpricedEventCount: number;
+  
+  // V0 default is USD
+  currency: string;
+}
+
+export interface CostPerOutcomeDataPoint {
+  periodStart: Date;
+  periodEnd: Date;
+  totalCost: string;
+  outcomeCount: number;
+  costPerOutcome: string | null;
+  unpricedEventCount: number;
 }
 
 export interface AuditFinding {
@@ -72,4 +99,11 @@ export interface AuditFinding {
   confidence: 'high' | 'medium' | 'low';
   evidence: Record<string, any>;
   timestamp: Date;
+}
+
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
 }

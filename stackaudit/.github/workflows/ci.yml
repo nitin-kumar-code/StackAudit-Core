@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup Supabase CLI
+      uses: supabase/setup-cli@v1
+      with:
+        version: latest
+
+    - name: Start Supabase Local Stack
+      run: supabase start
+      
+    - name: Generate Types and Apply Migrations
+      run: |
+        supabase gen types typescript --local > database.types.ts
+        supabase db push
+
+    - name: Run Tests
+      env:
+        # Supabase local stack defaults
+        NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJh...' }} # Uses local anon/service keys normally, but we ensure fail if not loaded properly
+      run: |
+        if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+          echo "Error: SUPABASE_SERVICE_ROLE_KEY is required but missing in CI environment!"
+          exit 1
+        fi
+        npm run test -- --run
