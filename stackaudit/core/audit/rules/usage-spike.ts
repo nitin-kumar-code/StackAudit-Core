@@ -1,5 +1,5 @@
+import { SkipError, AuditFinding } from '../../types';
 import { AuditRule, AuditContext } from '../types';
-import { AuditFinding } from '../../types';
 import { AUDIT_THRESHOLDS } from '../thresholds';
 
 export class UsageSpikeRule implements AuditRule {
@@ -8,12 +8,8 @@ export class UsageSpikeRule implements AuditRule {
   evaluate(context: AuditContext): Omit<AuditFinding, 'id' | 'detectedAt'> | null {
     const { currentMetrics, baselineMetrics, currentWindow } = context;
 
-    // Need enough data to evaluate safely
-    if (currentMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE) {
-      return null;
-    }
-    if (baselineMetrics.requestCount === 0) {
-      return null;
+    if (currentMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE || baselineMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE) {
+      throw new SkipError(`Skipped: Request volume below min sample size (${AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE})`);
     }
 
     const changeRatio = (currentMetrics.requestCount - baselineMetrics.requestCount) / baselineMetrics.requestCount;
@@ -25,8 +21,8 @@ export class UsageSpikeRule implements AuditRule {
         organizationId: context.organizationId,
         workloadId: context.workloadId,
         category: this.id,
-        severity: changeRatio > 1.0 ? 'HIGH' : 'MEDIUM',
-        confidence: baselineMetrics.requestCount > 500 ? 'HIGH' : 'MEDIUM',
+        severity: changeRatio > AUDIT_THRESHOLDS.HIGH_SEVERITY_SPIKE_PERCENT ? 'HIGH' : 'MEDIUM',
+        confidence: baselineMetrics.requestCount > AUDIT_THRESHOLDS.HIGH_CONFIDENCE_SPIKE_VOLUME ? 'HIGH' : 'MEDIUM',
         title: 'Significant Usage Spike Detected',
         description: `Usage volume increased by ${changePercent}% compared to the baseline period.`,
         evidence: {
@@ -39,7 +35,8 @@ export class UsageSpikeRule implements AuditRule {
           windowEnd: currentWindow.end.toISOString()
         },
         timeWindowStart: currentWindow.start,
-        timeWindowEnd: currentWindow.end
+        timeWindowEnd: currentWindow.end,
+        status: 'OPEN'
       };
     }
 

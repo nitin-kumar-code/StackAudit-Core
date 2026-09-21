@@ -1,5 +1,5 @@
+import { SkipError, AuditFinding } from '../../types';
 import { AuditRule, AuditContext } from '../types';
-import { AuditFinding } from '../../types';
 import { AUDIT_THRESHOLDS } from '../thresholds';
 
 export class ModelMixRule implements AuditRule {
@@ -8,13 +8,14 @@ export class ModelMixRule implements AuditRule {
   evaluate(context: AuditContext): Omit<AuditFinding, 'id' | 'detectedAt'> | null {
     const { currentMetrics, baselineMetrics, currentWindow } = context;
 
-    if (!currentMetrics.models || !baselineMetrics.models) return null;
-    if (baselineMetrics.requestCount === 0 || currentMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE) return null;
+    if (!currentMetrics.models || !baselineMetrics.models) throw new SkipError('Skipped: Model mix data unavailable');
+    if (currentMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE || baselineMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE) {
+      throw new SkipError(`Skipped: Request volume below min sample size (${AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE})`);
+    }
 
     let maxShift = 0;
     let shiftDetails = '';
     
-    // Check for significant shifts in request share
     const allModels = new Set([...Object.keys(currentMetrics.models), ...Object.keys(baselineMetrics.models)]);
     
     for (const model of allModels) {
@@ -33,7 +34,7 @@ export class ModelMixRule implements AuditRule {
         organizationId: context.organizationId,
         workloadId: context.workloadId,
         category: this.id,
-        severity: 'INFO', // Model shifts are informative, not necessarily bad
+        severity: 'INFO',
         confidence: 'HIGH',
         title: 'Significant Model Mix Shift',
         description: `The distribution of models used by this workload has changed significantly. ${shiftDetails}`,
@@ -47,7 +48,8 @@ export class ModelMixRule implements AuditRule {
           details: { shiftDetails }
         },
         timeWindowStart: currentWindow.start,
-        timeWindowEnd: currentWindow.end
+        timeWindowEnd: currentWindow.end,
+        status: 'OPEN'
       };
     }
 

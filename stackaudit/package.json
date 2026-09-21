@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "test:unit": "vitest run --exclude **/integration.test.ts",
+    "test:integration": "vitest run **/integration.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

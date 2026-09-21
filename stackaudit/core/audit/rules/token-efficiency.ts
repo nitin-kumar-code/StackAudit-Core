@@ -1,5 +1,5 @@
+import { SkipError, AuditFinding } from '../../types';
 import { AuditRule, AuditContext } from '../types';
-import { AuditFinding } from '../../types';
 import { AUDIT_THRESHOLDS } from '../thresholds';
 
 export class TokenEfficiencyRule implements AuditRule {
@@ -8,14 +8,14 @@ export class TokenEfficiencyRule implements AuditRule {
   evaluate(context: AuditContext): Omit<AuditFinding, 'id' | 'detectedAt'> | null {
     const { currentMetrics, baselineMetrics, currentWindow } = context;
 
-    if (baselineMetrics.requestCount === 0 || currentMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE) {
-      return null;
+    if (currentMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE || baselineMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE) {
+      throw new SkipError(`Skipped: Request volume below min sample size (${AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE})`);
     }
 
     const baselineTokensPerReq = baselineMetrics.totalTokens / baselineMetrics.requestCount;
     const currentTokensPerReq = currentMetrics.totalTokens / currentMetrics.requestCount;
 
-    if (baselineTokensPerReq === 0) return null;
+    if (baselineTokensPerReq === 0) throw new SkipError('Skipped: Baseline tokens per request is 0');
 
     const changeRatio = (currentTokensPerReq - baselineTokensPerReq) / baselineTokensPerReq;
 
@@ -40,7 +40,8 @@ export class TokenEfficiencyRule implements AuditRule {
           windowEnd: currentWindow.end.toISOString()
         },
         timeWindowStart: currentWindow.start,
-        timeWindowEnd: currentWindow.end
+        timeWindowEnd: currentWindow.end,
+        status: 'OPEN'
       };
     }
 

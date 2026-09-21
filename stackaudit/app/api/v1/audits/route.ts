@@ -14,6 +14,11 @@ export async function POST(req: Request) {
     if (!body.workloadId || !body.start || !body.end) {
       return NextResponse.json({ error: 'Missing required fields: workloadId, start, end' }, { status: 400 });
     }
+    
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(body.workloadId)) {
+      return NextResponse.json({ error: 'Invalid workloadId format' }, { status: 400 });
+    }
 
     const start = new Date(body.start);
     const end = new Date(body.end);
@@ -22,15 +27,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid date formats for start or end' }, { status: 400 });
     }
 
-    const findings = await auditService.runAudit(orgId, {
+    const result = await auditService.runAudit(orgId, {
       workloadId: body.workloadId,
       start,
       end
     });
 
     return NextResponse.json({
-      window: { start: start.toISOString(), end: end.toISOString() },
-      findings
+      window: result.window,
+      findings: result.findings,
+      metadata: {
+        rulesEvaluated: result.rulesEvaluated,
+        rulesSkipped: result.rulesSkipped
+      }
     }, { status: 200 });
 
   } catch (error: any) {

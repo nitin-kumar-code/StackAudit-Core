@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { AuditContext, TimeWindow, MetricSummary } from './types';
 import { AuditFinding, AuditCategory } from '../types';
-import { AuditEngine } from './engine';
+import { AuditEngine, AuditEngineResult } from './engine';
 import { ALL_RULES } from './rules';
 import { WorkloadNotFoundError, ValidationError } from '../workloads/service';
 
@@ -11,6 +11,13 @@ export interface RunAuditDTO {
   end: Date;
 }
 
+export interface RunAuditResult {
+  window: { start: string; end: string };
+  findings: AuditFinding[];
+  rulesEvaluated: string[];
+  rulesSkipped: { ruleId: string; reason: string }[];
+}
+
 export class AuditService {
   private engine: AuditEngine;
 
@@ -18,10 +25,15 @@ export class AuditService {
     this.engine = new AuditEngine(ALL_RULES);
   }
 
-  async runAudit(organizationId: string, dto: RunAuditDTO): Promise<AuditFinding[]> {
+  async runAudit(organizationId: string, dto: RunAuditDTO): Promise<RunAuditResult> {
     if (dto.start >= dto.end) throw new ValidationError('start must be before end');
     
-    // Verify workload belongs to org
+    // Validate range cap (366 days max)
+    const MAX_DAYS = 366;
+    if ((dto.end.getTime() - dto.start.getTime()) > MAX_DAYS * 24 * 60 * 60 * 1000) {
+      throw new ValidationError(`Range exceeds maximum of ${MAX_DAYS} days`);
+    }
+
     const { data: wl, error: wlError } = await this.supabase
       .from('workloads')
       .select('id')
@@ -31,14 +43,24 @@ export class AuditService {
       
     if (wlError || !wl) throw new WorkloadNotFoundError(dto.workloadId);
 
-    // Build context
-    const currentWindow = { start: dto.start, end: dto.end };
+    // Snap to UTC Day boundaries
+    const snappedStart = new Date(Date.UTC(dto.start.getUTCFullYear(), dto.start.getUTCMonth(), dto.start.getUTCDate()));
+    let snappedEnd = new Date(Date.UTC(dto.end.getUTCFullYear(), dto.end.getUTCMonth(), dto.end.getUTCDate()));
     
-    // Simple V0 Baseline: Previous period of exact same duration
-    const durationMs = dto.end.getTime() - dto.start.getTime();
+    // Clamp end to UTC midnight today (minus 1 day for ingestion lag safety)
+    const now = new Date();
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    if (snappedEnd.getTime() > todayUTC.getTime()) {
+      snappedEnd = todayUTC;
+    }
+    
+    const currentWindow = { start: snappedStart, end: snappedEnd };
+    const durationMs = currentWindow.end.getTime() - currentWindow.start.getTime();
+    if (durationMs <= 0) throw new ValidationError('Effective query window resolves to 0 or negative days after snapping');
+
     const baselineWindow = {
-      start: new Date(dto.start.getTime() - durationMs),
-      end: dto.start
+      start: new Date(currentWindow.start.getTime() - durationMs),
+      end: currentWindow.start
     };
 
     const currentMetrics = await this.loadMetrics(organizationId, dto.workloadId, currentWindow);
@@ -58,49 +80,40 @@ export class AuditService {
       baselineOutcomes
     };
 
-    // Run rules
-    const findings = this.engine.evaluate(context);
+    const evaluation = this.engine.evaluate(context);
+    const persisted = await this.persistFindings(organizationId, dto.workloadId, evaluation.findings);
 
-    // Persist and return findings
-    return this.persistFindings(organizationId, dto.workloadId, findings);
+    return {
+      window: { start: currentWindow.start.toISOString(), end: currentWindow.end.toISOString() },
+      findings: persisted,
+      rulesEvaluated: evaluation.rulesEvaluated,
+      rulesSkipped: evaluation.rulesSkipped
+    };
   }
 
   private async loadMetrics(orgId: string, workloadId: string, window: TimeWindow): Promise<MetricSummary> {
-    // In V0, we query the view to get aggregated metrics and model groupings
-    const { data, error } = await this.supabase
-      .from('v_attributed_usage_events')
-      .select('calculated_cost, input_tokens, output_tokens, model')
-      .eq('workload_id', workloadId)
-      .eq('organization_id', orgId)
-      .gte('timestamp', window.start.toISOString())
-      .lt('timestamp', window.end.toISOString());
+    const { data, error } = await this.supabase.rpc('aggregate_audit_metrics', {
+      p_organization_id: orgId,
+      p_workload_id: workloadId,
+      p_start_time: window.start.toISOString(),
+      p_end_time: window.end.toISOString()
+    });
 
-    if (error) throw new Error(`Failed to load usage for audit: ${error.message}`);
-
-    const metrics: MetricSummary = {
-      totalCost: 0,
-      totalTokens: 0,
-      requestCount: data.length,
-      models: {}
-    };
-
-    for (const row of data || []) {
-      const cost = parseFloat(row.calculated_cost) || 0;
-      const tokens = (Number(row.input_tokens) || 0) + (Number(row.output_tokens) || 0);
-      const model = row.model;
-
-      metrics.totalCost += cost;
-      metrics.totalTokens += tokens;
-
-      if (!metrics.models![model]) {
-        metrics.models![model] = { cost: 0, tokens: 0, requests: 0 };
-      }
-      metrics.models![model].cost += cost;
-      metrics.models![model].tokens += tokens;
-      metrics.models![model].requests += 1;
+    if (error) throw new Error(`Failed to load usage for audit via RPC: ${error.message}`);
+    
+    if (!data || data.length === 0) {
+      return { totalCost: 0, totalTokens: 0, requestCount: 0, unpricedEvents: 0, models: {} };
     }
+    
+    const row = data[0];
 
-    return metrics;
+    return {
+      totalCost: parseFloat(row.total_cost) || 0,
+      totalTokens: parseFloat(row.total_tokens) || 0,
+      requestCount: Number(row.request_count) || 0,
+      unpricedEvents: Number(row.unpriced_events) || 0,
+      models: row.models || {}
+    };
   }
 
   private async loadOutcomes(orgId: string, workloadId: string, window: TimeWindow): Promise<Record<string, number>> {
@@ -126,7 +139,7 @@ export class AuditService {
   private async persistFindings(
     orgId: string, 
     workloadId: string, 
-    findings: Omit<AuditFinding, 'id' | 'detectedAt'>[]
+    findings: Omit<AuditFinding, 'id' | 'detectedAt' | 'status'>[]
   ): Promise<AuditFinding[]> {
     if (findings.length === 0) return [];
 
@@ -143,20 +156,28 @@ export class AuditService {
       time_window_end: f.timeWindowEnd.toISOString()
     }));
 
-    // Use Postgres ON CONFLICT DO NOTHING to silently ignore exact duplicate executions for the same window
-    const { data, error } = await this.supabase
-      .from('audit_findings')
-      .upsert(records, {
-        onConflict: 'organization_id, workload_id, category, time_window_start, time_window_end',
-        ignoreDuplicates: false // Wait, if we use DO NOTHING, we can either ignoreDuplicates: true or let upsert update the record. Updating is fine to freshen evidence. Let's update.
-      })
-      .select();
+    const { error } = await this.supabase.rpc('upsert_audit_findings', {
+      p_findings: records
+    });
 
     if (error) {
-      throw new Error(`Failed to persist audit findings: ${error.message}`);
+      throw new Error(`Failed to persist audit findings via RPC: ${error.message}`);
     }
+    
+    // We fetch the updated records since the RPC doesn't return them directly in this simple implementation
+    const { data: freshFindings } = await this.supabase
+      .from('audit_findings')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('workload_id', workloadId);
+      
+    // Filter down to the windows we just evaluated
+    const relevant = (freshFindings || []).filter(f => 
+       findings.some(orig => orig.category === f.category && 
+       new Date(f.time_window_start).getTime() === orig.timeWindowStart.getTime())
+    );
 
-    return (data || []).map((row: any) => ({
+    return relevant.map((row: any) => ({
       id: row.id,
       organizationId: row.organization_id,
       workloadId: row.workload_id,
@@ -168,7 +189,8 @@ export class AuditService {
       evidence: row.evidence,
       timeWindowStart: new Date(row.time_window_start),
       timeWindowEnd: new Date(row.time_window_end),
-      detectedAt: new Date(row.detected_at)
+      detectedAt: new Date(row.detected_at),
+      status: row.status
     }));
   }
 }

@@ -9,7 +9,7 @@ export interface MetricSummary {
   totalCost: number;
   totalTokens: number;
   requestCount: number;
-  // If model mix is supported
+  unpricedEvents: number; // Added for data quality checks
   models?: Record<string, { cost: number; tokens: number; requests: number }>;
 }
 
@@ -18,12 +18,8 @@ export interface AuditContext {
   workloadId: string;
   currentWindow: TimeWindow;
   baselineWindow: TimeWindow;
-
   currentMetrics: MetricSummary;
   baselineMetrics: MetricSummary;
-
-  // Outcomes for Outcome-Aware Auditing
-  // Map of outcomeType -> total count in the period
   currentOutcomes?: Record<string, number>;
   baselineOutcomes?: Record<string, number>;
 }

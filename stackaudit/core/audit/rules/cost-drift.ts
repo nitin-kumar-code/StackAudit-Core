@@ -1,5 +1,5 @@
+import { SkipError, AuditFinding } from '../../types';
 import { AuditRule, AuditContext } from '../types';
-import { AuditFinding } from '../../types';
 import { AUDIT_THRESHOLDS } from '../thresholds';
 
 export class CostDriftRule implements AuditRule {
@@ -8,67 +8,73 @@ export class CostDriftRule implements AuditRule {
   evaluate(context: AuditContext): Omit<AuditFinding, 'id' | 'detectedAt'> | null {
     const { currentMetrics, baselineMetrics, currentWindow, currentOutcomes, baselineOutcomes } = context;
 
-    if (baselineMetrics.totalCost < AUDIT_THRESHOLDS.MIN_BASELINE_COST_USD) return null;
-    if (baselineMetrics.requestCount === 0 || currentMetrics.requestCount === 0) return null;
+    if (baselineMetrics.totalCost < AUDIT_THRESHOLDS.MIN_BASELINE_COST_USD) {
+      throw new SkipError(`Skipped: Baseline cost below threshold ($${AUDIT_THRESHOLDS.MIN_BASELINE_COST_USD})`);
+    }
+    if (baselineMetrics.requestCount === 0 || currentMetrics.requestCount === 0) {
+      throw new SkipError('Skipped: Insufficient request volume');
+    }
+    if (currentMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE || baselineMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE) {
+      throw new SkipError(`Skipped: Request volume below min sample size (${AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE})`);
+    }
+    // Check both windows for unpriced events!
+    if (currentMetrics.unpricedEvents > 0 || baselineMetrics.unpricedEvents > 0) {
+      throw new SkipError('Skipped: Window contains unpriced events, understating cost');
+    }
 
-    const costChangeRatio = (currentMetrics.totalCost - baselineMetrics.totalCost) / baselineMetrics.totalCost;
-    const costChangePercent = parseFloat((costChangeRatio * 100).toFixed(2));
-    
-    // Calculate outcome volume change if available, otherwise fallback to request volume change
-    let volumeChangeRatio = 0;
-    let volumeMetric = 'request_count';
+    let volumeMetric = 'requests';
     let baselineVol = baselineMetrics.requestCount;
     let currentVol = currentMetrics.requestCount;
 
     if (currentOutcomes && baselineOutcomes) {
-      // Sum all outcomes if multiple types exist
-      const bOutcomes = Object.values(baselineOutcomes).reduce((a, b) => a + b, 0);
-      const cOutcomes = Object.values(currentOutcomes).reduce((a, b) => a + b, 0);
+      const bKeys = Object.keys(baselineOutcomes);
+      const cKeys = Object.keys(currentOutcomes);
       
-      if (bOutcomes > 0) {
-        volumeChangeRatio = (cOutcomes - bOutcomes) / bOutcomes;
-        volumeMetric = 'outcome_count';
-        baselineVol = bOutcomes;
-        currentVol = cOutcomes;
-      } else {
-        volumeChangeRatio = (currentMetrics.requestCount - baselineMetrics.requestCount) / baselineMetrics.requestCount;
+      if (bKeys.length > 0) {
+        const primaryOutcome = bKeys.reduce((a, b) => baselineOutcomes[a] > baselineOutcomes[b] ? a : b);
+        
+        if (baselineOutcomes[primaryOutcome] > 0) {
+          if (!currentOutcomes[primaryOutcome] || currentOutcomes[primaryOutcome] === 0) {
+             throw new SkipError(`Skipped: Outcome feed for '${primaryOutcome}' dropped to 0 in current window`);
+          }
+          volumeMetric = `outcome_${primaryOutcome}`;
+          baselineVol = baselineOutcomes[primaryOutcome];
+          currentVol = currentOutcomes[primaryOutcome];
+        }
       }
-    } else {
-      volumeChangeRatio = (currentMetrics.requestCount - baselineMetrics.requestCount) / baselineMetrics.requestCount;
     }
-    
-    const volumeChangePercent = parseFloat((volumeChangeRatio * 100).toFixed(2));
 
-    // A drift is when cost increases significantly MORE than volume
-    // E.g., usage increases 10%, but cost increases 50%
-    const driftRatio = costChangeRatio - volumeChangeRatio;
+    const baselineUnitCost = baselineMetrics.totalCost / baselineVol;
+    const currentUnitCost = currentMetrics.totalCost / currentVol;
+
+    const driftRatio = (currentUnitCost / baselineUnitCost) - 1;
 
     if (driftRatio > AUDIT_THRESHOLDS.COST_DRIFT_PERCENT) {
+      const driftPercent = parseFloat((driftRatio * 100).toFixed(2));
+      const severity = driftRatio > AUDIT_THRESHOLDS.HIGH_SEVERITY_DRIFT_PERCENT ? 'HIGH' : 'MEDIUM';
+      const confidence = baselineVol > AUDIT_THRESHOLDS.HIGH_CONFIDENCE_VOLUME ? 'HIGH' : 'MEDIUM';
+
       return {
         organizationId: context.organizationId,
         workloadId: context.workloadId,
         category: this.id,
-        severity: driftRatio > 0.6 ? 'HIGH' : 'MEDIUM',
-        confidence: baselineVol > 100 ? 'HIGH' : 'MEDIUM',
+        severity,
+        confidence,
         title: 'Disproportionate Cost Drift',
-        description: `Cost increased by ${costChangePercent}% while ${volumeMetric.replace('_', ' ')} changed by only ${volumeChangePercent}%.`,
+        description: `Unit cost per ${volumeMetric.replace('outcome_', 'outcome (')} ${volumeMetric.startsWith('outcome_') ? ')' : ''} increased by ${driftPercent}%.`,
         evidence: {
-          metric: 'cost_drift',
-          baseline: baselineMetrics.totalCost,
-          observed: currentMetrics.totalCost,
-          changePercent: costChangePercent,
+          metric: 'unit_cost_drift',
+          baseline: parseFloat(baselineUnitCost.toFixed(4)),
+          observed: parseFloat(currentUnitCost.toFixed(4)),
+          changePercent: driftPercent,
           sampleSize: currentMetrics.requestCount,
           windowStart: currentWindow.start.toISOString(),
           windowEnd: currentWindow.end.toISOString(),
-          details: {
-            volumeMetric,
-            volumeChangePercent,
-            baselineVolume: baselineVol,
-            currentVolume: currentVol
-          }
+          details: { volumeMetric, baselineVolume: baselineVol, currentVolume: currentVol, baselineTotalCost: baselineMetrics.totalCost, currentTotalCost: currentMetrics.totalCost }
         },
         timeWindowStart: currentWindow.start,
-        timeWindowEnd: currentWindow.end
+        timeWindowEnd: currentWindow.end,
+        status: 'OPEN'
       };
     }
 
