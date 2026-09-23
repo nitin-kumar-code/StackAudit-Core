@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   try {
     const orgId = await getAuthOrgId(req);
     const workloads = await workloadService.listWorkloads(orgId);
-    return NextResponse.json({ data: workloads });
+    return NextResponse.json({ workloads });
   } catch (error: any) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });

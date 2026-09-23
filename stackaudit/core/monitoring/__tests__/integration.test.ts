@@ -68,12 +68,12 @@ describe('Monitoring Engine Integration', () => {
     
     // Check alert was created
     const { data: alerts } = await supabase.from('alerts').select('*').eq('finding_id', finding.id);
-    expect(alerts.length).toBe(1);
-    expect(alerts[0].status).toBe('OPEN');
-    expect(alerts[0].severity).toBe('HIGH');
+    expect(alerts!.length).toBe(1);
+    expect(alerts![0].status).toBe('OPEN');
+    expect(alerts![0].severity).toBe('HIGH');
     
     // Check it updated the finding status
     const { data: updatedFinding } = await supabase.from('audit_findings').select('status').eq('id', finding.id).single();
-    expect(updatedFinding.status).toBe('OPEN'); // Should remain open
+    expect(updatedFinding!.status).toBe('OPEN'); // Should remain open
   });
 });

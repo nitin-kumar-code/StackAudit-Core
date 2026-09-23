@@ -16,7 +16,17 @@ export class ForbiddenError extends Error {
 
 export async function getAuthOrgId(req: Request): Promise<string> {
   const authHeader = req.headers.get('Authorization');
+  
   if (!authHeader) {
+    // Fallback for local development demo
+    if (process.env.NODE_ENV === 'development') {
+      if (process.env.DEMO_ORG_ID) {
+        return process.env.DEMO_ORG_ID;
+      }
+      // If server wasn't restarted and env var is missing, fetch any org
+      const { data } = await supabaseAdmin.from('organizations').select('id').limit(1).single();
+      if (data?.id) return data.id;
+    }
     throw new UnauthorizedError('Missing Authorization header');
   }
   
@@ -34,4 +44,20 @@ export async function getAuthOrgId(req: Request): Promise<string> {
   }
   
   return orgId;
+}
+
+export async function getAuthUser(req: Request) {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    throw new UnauthorizedError('Missing Authorization header');
+  }
+  
+  const token = authHeader.replace('Bearer ', '').trim();
+  
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) {
+    throw new UnauthorizedError('Invalid or expired token');
+  }
+  
+  return user;
 }

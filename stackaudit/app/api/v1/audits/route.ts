@@ -52,3 +52,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+export async function GET(req: Request) {
+  try {
+    const orgId = await getAuthOrgId(req);
+    const { data: findings, error } = await supabaseAdmin
+      .from('audit_findings')
+      .select('*')
+      .eq('organization_id', orgId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+      
+    if (error) throw new Error(error.message);
+    
+    return NextResponse.json({ findings }, { status: 200 });
+  } catch (error: any) {
+    if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    console.error('Audit GET Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

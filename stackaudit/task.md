@@ -1,0 +1,22 @@
+# Phase 9 Task Tracker
+
+- [ ] Inspect current frontend structure (Done)
+- [ ] Implement secure Onboarding flow (A4 requirement):
+  - [ ] `POST /api/v1/auth/setup-org`
+  - [ ] UI: `/onboarding` page
+- [ ] Create Demo Seed Script (`scripts/seed-demo-data.ts`) with edge states
+- [ ] Implement backend aggregation endpoints:
+  - [ ] `GET /api/v1/dashboard/summary` (C6 compliant)
+  - [ ] `GET /api/v1/dashboard/trends`
+  - [ ] `GET /api/v1/usage` (pagination)
+- [ ] Create Shared Frontend Utilities (API clients, hooks, DateRangeContext)
+- [ ] Create Application Shell (`app/(app)/layout.tsx`)
+- [ ] Build Dashboard (`app/(app)/dashboard`)
+- [ ] Build Workloads (`app/(app)/workloads` and `[id]`)
+- [ ] Build Usage (`app/(app)/usage`)
+- [ ] Build Outcomes (`app/(app)/outcomes`)
+- [ ] Build Audits (`app/(app)/audits` and `[id]`)
+- [ ] Build Alerts (`app/(app)/alerts` and `[id]`)
+- [ ] Build Settings (`app/(app)/settings`)
+- [ ] Build Frontend Tests (focus on Auth flow & CPO logic)
+- [ ] Final Verification (Typecheck, Lint, Build)
