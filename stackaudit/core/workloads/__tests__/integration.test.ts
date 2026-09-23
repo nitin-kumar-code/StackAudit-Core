@@ -30,8 +30,8 @@ describe('Workload Integration (Cross-Org Isolation)', () => {
   });
 
   it('proves organization isolation and strict ambiguity prevention', async () => {
-    const wlA = await workloadService.createWorkload(orgAId, { name: 'WL A' });
-    const wlB = await workloadService.createWorkload(orgBId, { name: 'WL B' });
+    const wlA = await workloadService.createWorkload({ organizationId: orgAId, name: 'WL A' });
+    const wlB = await workloadService.createWorkload({ organizationId: orgBId, name: 'WL B' });
 
     // Org A creates a rule for key_123
     await workloadService.createAttributionRule(orgAId, wlA.id, {
@@ -49,7 +49,7 @@ describe('Workload Integration (Cross-Org Isolation)', () => {
     });
 
     // Org A tries to create ANOTHER rule for key_123 on a different workload
-    const wlA2 = await workloadService.createWorkload(orgAId, { name: 'WL A2' });
+    const wlA2 = await workloadService.createWorkload({ organizationId: orgAId, name: 'WL A2' });
     
     // This MUST FAIL (23505 duplicate) because Org A can't ambiguously attribute the same key
     await expect(

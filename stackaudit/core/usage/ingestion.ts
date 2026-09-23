@@ -70,6 +70,7 @@ export async function ingestUsageEvents(
       api_key_id: event.attribution.apiKeyId || null,
       calculated_cost: cost,
       is_unpriced: isUnpriced,
+      request_count: event.usage.requestCount || 1,
       raw_response_hash: event.rawResponseHash,
       captured_at: event.capturedAt?.toISOString() || new Date().toISOString()
     });

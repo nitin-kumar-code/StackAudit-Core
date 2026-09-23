@@ -85,7 +85,9 @@ export class OpenAIAdapter implements ProviderAdapter {
             inputTokens,
             outputTokens,
             cacheReadTokens,
-            cacheCreationTokens
+            cacheCreationTokens,
+            // B2: Carry real request count from OpenAI Admin API
+            requestCount: record.n_requests || 1
           },
           attribution: {
             apiKeyId,

@@ -43,6 +43,12 @@ export class AuditService {
       
     if (wlError || !wl) throw new WorkloadNotFoundError(dto.workloadId);
 
+    // B5: Fetch sync watermarks to clamp end date
+    const { data: watermarks } = await this.supabase
+      .from('provider_sync_state')
+      .select('last_ingested_bucket_end')
+      .eq('organization_id', organizationId);
+
     // Snap to UTC Day boundaries
     const snappedStart = new Date(Date.UTC(dto.start.getUTCFullYear(), dto.start.getUTCMonth(), dto.start.getUTCDate()));
     let snappedEnd = new Date(Date.UTC(dto.end.getUTCFullYear(), dto.end.getUTCMonth(), dto.end.getUTCDate()));
@@ -50,13 +56,23 @@ export class AuditService {
     // Clamp end to UTC midnight today (minus 1 day for ingestion lag safety)
     const now = new Date();
     const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    if (snappedEnd.getTime() > todayUTC.getTime()) {
-      snappedEnd = todayUTC;
+    let maxSafeEnd = todayUTC;
+
+    // B5: If we have watermarks, the max safe end is the minimum of those watermarks
+    if (watermarks && watermarks.length > 0) {
+      const minWatermark = new Date(Math.min(...watermarks.map(w => new Date(w.last_ingested_bucket_end).getTime())));
+      if (minWatermark.getTime() < maxSafeEnd.getTime()) {
+        maxSafeEnd = minWatermark;
+      }
+    }
+
+    if (snappedEnd.getTime() > maxSafeEnd.getTime()) {
+      snappedEnd = maxSafeEnd;
     }
     
     const currentWindow = { start: snappedStart, end: snappedEnd };
     const durationMs = currentWindow.end.getTime() - currentWindow.start.getTime();
-    if (durationMs <= 0) throw new ValidationError('Effective query window resolves to 0 or negative days after snapping');
+    if (durationMs <= 0) throw new ValidationError('Effective query window resolves to 0 or negative days after snapping/clamping to watermark');
 
     const baselineWindow = {
       start: new Date(currentWindow.start.getTime() - durationMs),
@@ -81,7 +97,20 @@ export class AuditService {
     };
 
     const evaluation = this.engine.evaluate(context);
-    const persisted = await this.persistFindings(organizationId, dto.workloadId, evaluation.findings);
+    
+    // B5: Flag findings with stale watermark warning
+    if (watermarks && watermarks.length > 0) {
+      const minWatermarkTime = Math.min(...watermarks.map(w => new Date(w.last_ingested_bucket_end).getTime()));
+      if (minWatermarkTime < currentWindow.end.getTime()) {
+        for (const finding of evaluation.findings) {
+          finding.confidence = 'LOW';
+          if (!finding.evidence.details) finding.evidence.details = {};
+          finding.evidence.details.watermarkWarning = 'Data completeness not guaranteed. Provider sync watermark is earlier than window end.';
+        }
+      }
+    }
+
+    const persisted = await this.persistFindings(organizationId, dto.workloadId, evaluation.findings, currentWindow);
 
     return {
       window: { start: currentWindow.start.toISOString(), end: currentWindow.end.toISOString() },
@@ -139,8 +168,32 @@ export class AuditService {
   private async persistFindings(
     orgId: string, 
     workloadId: string, 
-    findings: Omit<AuditFinding, 'id' | 'detectedAt' | 'status'>[]
+    findings: Omit<AuditFinding, 'id' | 'detectedAt' | 'status'>[],
+    window: TimeWindow
   ): Promise<AuditFinding[]> {
+    
+    // C3: Stale finding resolution
+    // Resolve any OPEN findings for this org+workload+window that did NOT fire this time
+    const activeCategories = findings.map(f => f.category);
+    let staleQuery = this.supabase
+      .from('audit_findings')
+      .update({ status: 'RESOLVED' })
+      .eq('organization_id', orgId)
+      .eq('status', 'OPEN')
+      .eq('time_window_start', window.start.toISOString());
+      
+    if (workloadId) {
+      staleQuery = staleQuery.eq('workload_id', workloadId);
+    } else {
+      staleQuery = staleQuery.is('workload_id', null);
+    }
+
+    if (activeCategories.length > 0) {
+      staleQuery = staleQuery.not('category', 'in', `(${activeCategories.join(',')})`);
+    }
+
+    await staleQuery;
+
     if (findings.length === 0) return [];
 
     const records = findings.map(f => ({
@@ -164,14 +217,13 @@ export class AuditService {
       throw new Error(`Failed to persist audit findings via RPC: ${error.message}`);
     }
     
-    // We fetch the updated records since the RPC doesn't return them directly in this simple implementation
+    // Fetch updated records
     const { data: freshFindings } = await this.supabase
       .from('audit_findings')
       .select('*')
       .eq('organization_id', orgId)
       .eq('workload_id', workloadId);
       
-    // Filter down to the windows we just evaluated
     const relevant = (freshFindings || []).filter(f => 
        findings.some(orig => orig.category === f.category && 
        new Date(f.time_window_start).getTime() === orig.timeWindowStart.getTime())

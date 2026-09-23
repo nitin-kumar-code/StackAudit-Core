@@ -81,7 +81,7 @@ export class OutcomeService {
 
           return {
             event: {
-              id: existing.id,
+              id: existing.id, organizationId,
               workloadId: existing.workload_id,
               outcomeType: existing.outcome_type,
               timestamp: new Date(existing.timestamp),
@@ -98,7 +98,7 @@ export class OutcomeService {
 
     return {
       event: {
-        id: data.id,
+        id: data.id, organizationId,
         workloadId: data.workload_id,
         outcomeType: data.outcome_type,
         timestamp: new Date(data.timestamp),
@@ -149,7 +149,8 @@ export class OutcomeService {
       costPerOutcome,
       unpricedEventCount: Number(result.unpriced_events || 0),
       
-      currency: 'USD'
+      currency: 'USD',
+      costAllocationNote: 'Unallocated. This workload cost per outcome represents the total workload cost divided by this outcome type. It does not partition cost among different outcome types.'
     };
   }
 

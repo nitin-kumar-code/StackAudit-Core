@@ -8,7 +8,7 @@ export async function repriceUnpricedEvents(
   supabase: SupabaseClient
 ) {
   let hasMore = true;
-  let offset = 0;
+  let lastId: string | null = null;
   const BATCH_SIZE = 500;
   
   const result = {
@@ -19,12 +19,20 @@ export async function repriceUnpricedEvents(
   };
 
   while (hasMore) {
-    const { data: rows, error: fetchError } = await supabase
+    let query = supabase
       .from('usage_events')
       .select('*')
       .eq('organization_id', organizationId)
       .eq('is_unpriced', true)
-      .range(offset, offset + BATCH_SIZE - 1);
+      .lt('reprice_attempts', 3) // B4: Cap retries
+      .order('id', { ascending: true }) // Deterministic sorting
+      .limit(BATCH_SIZE);
+      
+    if (lastId) {
+      query = query.gt('id', lastId); // Keyset pagination for mutating datasets
+    }
+
+    const { data: rows, error: fetchError } = await query;
 
     if (fetchError) {
       result.errors.push(new Error(`Failed to fetch unpriced events: ${fetchError.message}`));
@@ -37,10 +45,19 @@ export async function repriceUnpricedEvents(
     }
     
     result.totalAttempted += rows.length;
-
     const updates = [];
 
     for (const row of rows) {
+      // Force a consistent shape for PostgREST batching
+      // relies on reprice_attempts defaulting to 0 (NOT NULL schema guard)
+      const updatePayload = {
+        id: row.id,
+        organization_id: organizationId,
+        calculated_cost: row.calculated_cost,
+        is_unpriced: row.is_unpriced,
+        reprice_attempts: row.reprice_attempts || 0 
+      };
+
       try {
         const canonical: CanonicalUsageEvent = {
           id: row.id,
@@ -67,12 +84,9 @@ export async function repriceUnpricedEvents(
         
         const costResult = calculateCost(canonical, pricingRecord);
         
-        updates.push({
-          id: row.id,
-          organization_id: organizationId,
-          calculated_cost: costResult.totalCost,
-          is_unpriced: false
-        });
+        // Success path mutation
+        updatePayload.calculated_cost = costResult.totalCost;
+        updatePayload.is_unpriced = false;
         
         result.successful++;
       } catch (error) {
@@ -81,7 +95,11 @@ export async function repriceUnpricedEvents(
         } else {
           result.errors.push(error as Error);
         }
+        // Failure path mutation
+        updatePayload.reprice_attempts += 1;
       }
+      
+      updates.push(updatePayload);
     }
 
     if (updates.length > 0) {
@@ -97,7 +115,7 @@ export async function repriceUnpricedEvents(
     if (rows.length < BATCH_SIZE) {
       hasMore = false;
     } else {
-      offset += BATCH_SIZE;
+      lastId = rows[rows.length - 1].id;
     }
   }
 

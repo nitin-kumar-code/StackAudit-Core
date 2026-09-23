@@ -84,7 +84,8 @@ export class AnthropicAdapter implements ProviderAdapter {
             inputTokens,
             outputTokens,
             cacheReadTokens,
-            cacheCreationTokens
+            cacheCreationTokens,
+            requestCount: 0 // B2: Anthropic API does not provide a request count
           },
           attribution: {
             apiKeyId,

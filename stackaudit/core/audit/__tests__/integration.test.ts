@@ -53,7 +53,7 @@ describe('Audit Engine Integration', () => {
   });
 
   it('runs audit service, returns findings, and persists them accurately', async () => {
-    const findings = await auditService.runAudit(orgId, {
+    const { findings } = await auditService.runAudit(orgId, {
       workloadId: wlId,
       start: currentStart,
       end: currentEnd
