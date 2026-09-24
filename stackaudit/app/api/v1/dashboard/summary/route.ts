@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     // 1. Total Cost & Usage (Aggregation in JS to avoid requiring remote DB migrations)
     const { data: rawUsage, error: usageError } = await supabaseAdmin
       .from('usage_events')
-      .select('calculated_cost, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, request_count, is_unpriced')
+      .select('calculated_cost, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, request_count')
       .eq('organization_id', orgId)
       .gte('timestamp', startTime.toISOString())
       .lt('timestamp', endTime.toISOString());
@@ -30,13 +30,11 @@ export async function GET(req: Request) {
     let totalCostNum = 0;
     let totalTokensNum = 0;
     let requestCountNum = 0;
-    let unpricedCount = 0;
 
     (rawUsage || []).forEach((row: any) => {
       totalCostNum += parseFloat(row.calculated_cost || '0');
       totalTokensNum += (row.input_tokens || 0) + (row.output_tokens || 0) + (row.cache_read_tokens || 0) + (row.cache_creation_tokens || 0);
       requestCountNum += (row.request_count || 0);
-      if (row.is_unpriced) unpricedCount++;
     });
 
     const totalCost = totalCostNum;
@@ -53,10 +51,17 @@ export async function GET(req: Request) {
     if (alertsError) throw new Error(`Failed to load alerts: ${alertsError.message}`);
 
     // 3. Outcomes & Cost Per Outcome
+    const { data: workloads } = await supabaseAdmin
+      .from('workloads')
+      .select('id')
+      .eq('organization_id', orgId);
+      
+    const workloadIds = (workloads || []).map(w => w.id);
+
     const { data: outcomesData, error: outcomesError } = await supabaseAdmin
       .from('outcome_events')
       .select('outcome_type, count')
-      .eq('organization_id', orgId)
+      .in('workload_id', workloadIds.length ? workloadIds : ['00000000-0000-0000-0000-000000000000'])
       .gte('timestamp', startTime.toISOString())
       .lt('timestamp', endTime.toISOString());
 
@@ -111,6 +116,6 @@ export async function GET(req: Request) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (error instanceof ForbiddenError) return NextResponse.json({ error: error.message }, { status: 403 });
     console.error('Dashboard Summary Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }

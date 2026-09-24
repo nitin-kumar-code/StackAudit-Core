@@ -23,11 +23,19 @@ export async function GET(req: Request) {
 
     if (trendsError) throw new Error(`Failed to load trends: ${trendsError.message}`);
 
+    // Fetch workloads first to filter outcome_events
+    const { data: workloads } = await supabaseAdmin
+      .from('workloads')
+      .select('id')
+      .eq('organization_id', orgId);
+      
+    const workloadIds = (workloads || []).map(w => w.id);
+
     // Call outcome_events directly for daily outcome sums
     const { data: outcomesData, error: outcomesError } = await supabaseAdmin
       .from('outcome_events')
       .select('timestamp, count')
-      .eq('organization_id', orgId)
+      .in('workload_id', workloadIds.length ? workloadIds : ['00000000-0000-0000-0000-000000000000'])
       .gte('timestamp', startParam)
       .lt('timestamp', endParam);
 
