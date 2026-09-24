@@ -33,7 +33,7 @@ export default function AlertsPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-gray-500">Loading alerts...</div>;
+  if (loading) return <div className="p-8 text-muted-foreground">Loading alerts...</div>;
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -41,22 +41,22 @@ export default function AlertsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Active Alerts</h1>
         <button 
           onClick={() => fetch('/api/v1/internal/monitoring/run', { method: 'POST' })}
-          className="px-4 py-2 bg-gray-900 text-white rounded-md hover:bg-gray-800 text-sm font-medium"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm font-medium"
         >
           Run Monitoring
         </button>
       </div>
 
       {alerts.length === 0 ? (
-        <div className="border border-dashed rounded-lg p-12 text-center text-gray-500 bg-white">
+        <div className="border border-dashed rounded-lg p-12 text-center text-muted-foreground bg-card">
           <CheckCircle className="w-8 h-8 mx-auto mb-4 text-green-500" />
-          <h3 className="text-lg font-medium text-gray-900 mb-1">No active alerts</h3>
+          <h3 className="text-lg font-medium text-foreground mb-1">No active alerts</h3>
           <p>Monitoring has not detected any configured anomalies.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {alerts.map((alert) => (
-            <div key={alert.id} className="bg-white border rounded-lg shadow-sm p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 border-l-red-500">
+            <div key={alert.id} className="bg-card border rounded-lg shadow-sm p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 border-l-red-500">
               <div>
                 <div className="flex items-center space-x-2 mb-1">
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
@@ -66,23 +66,23 @@ export default function AlertsPage() {
                   }`}>
                     {alert.severity}
                   </span>
-                  <span className="text-sm text-gray-500 font-mono">{alert.category}</span>
+                  <span className="text-sm text-muted-foreground font-mono">{alert.category}</span>
                 </div>
-                <h3 className="font-medium text-gray-900 text-lg">{alert.fingerprint}</h3>
-                <div className="text-sm text-gray-500 mt-1 flex items-center">
+                <h3 className="font-medium text-foreground text-lg">{alert.fingerprint}</h3>
+                <div className="text-sm text-muted-foreground mt-1 flex items-center">
                   <Clock className="w-4 h-4 mr-1" />
                   First triggered: {new Date(alert.first_triggered_at).toLocaleString()}
                 </div>
               </div>
               
               <div className="flex items-center space-x-3 shrink-0">
-                <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                <span className="text-sm font-medium text-foreground/80 bg-secondary px-3 py-1 rounded-full">
                   Status: {alert.status}
                 </span>
                 {alert.status === 'OPEN' && (
                   <button 
                     onClick={() => updateStatus(alert.id, 'acknowledge')}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium hover:bg-gray-50"
+                    className="px-4 py-2 border border-border rounded-md text-sm font-medium hover:bg-muted/50"
                   >
                     Acknowledge
                   </button>
@@ -90,7 +90,7 @@ export default function AlertsPage() {
                 {(alert.status === 'OPEN' || alert.status === 'ACKNOWLEDGED') && (
                   <button 
                     onClick={() => updateStatus(alert.id, 'resolve')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90"
                   >
                     Resolve
                   </button>

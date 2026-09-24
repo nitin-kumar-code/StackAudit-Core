@@ -1,3 +1,12 @@
+-- Create the function for updated_at triggers
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- 1. monitoring_configs
 CREATE TABLE monitoring_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -13,12 +13,13 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Missing start or end parameters' }, { status: 400 });
     }
 
-    // Call the RPC that calculates daily cost and tokens
-    const { data: trendsData, error: trendsError } = await supabaseAdmin.rpc('aggregate_dashboard_trends', {
-      p_organization_id: orgId,
-      p_start_time: startParam,
-      p_end_time: endParam
-    });
+    // Call usage_events directly to bypass missing RPC on remote DBs
+    const { data: rawUsage, error: trendsError } = await supabaseAdmin
+      .from('usage_events')
+      .select('timestamp, calculated_cost, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens')
+      .eq('organization_id', orgId)
+      .gte('timestamp', startParam)
+      .lt('timestamp', endParam);
 
     if (trendsError) throw new Error(`Failed to load trends: ${trendsError.message}`);
 
@@ -32,23 +33,27 @@ export async function GET(req: Request) {
 
     if (outcomesError) throw new Error(`Failed to load outcomes: ${outcomesError.message}`);
 
-    // Bucket outcomes by day locally to merge with the RPC response
-    const outcomeByDay = (outcomesData || []).reduce((acc: Record<string, number>, row) => {
-      // truncate to day (YYYY-MM-DD)
-      const day = new Date(row.timestamp).toISOString().split('T')[0];
-      acc[day] = (acc[day] || 0) + row.count;
-      return acc;
-    }, {});
+    const byDay: Record<string, { cost: number; tokens: number; outcomes: number }> = {};
 
-    const merged = (trendsData || []).map((row: any) => {
-      const day = new Date(row.period_start).toISOString().split('T')[0];
-      return {
-        date: day,
-        cost: parseFloat(row.total_cost || '0'),
-        tokens: parseFloat(row.total_tokens || '0'),
-        outcomes: outcomeByDay[day] || 0
-      };
+    (rawUsage || []).forEach((row: any) => {
+      const day = new Date(row.timestamp).toISOString().split('T')[0];
+      if (!byDay[day]) byDay[day] = { cost: 0, tokens: 0, outcomes: 0 };
+      byDay[day].cost += parseFloat(row.calculated_cost || '0');
+      byDay[day].tokens += (row.input_tokens || 0) + (row.output_tokens || 0) + (row.cache_read_tokens || 0) + (row.cache_creation_tokens || 0);
     });
+
+    (outcomesData || []).forEach((row: any) => {
+      const day = new Date(row.timestamp).toISOString().split('T')[0];
+      if (!byDay[day]) byDay[day] = { cost: 0, tokens: 0, outcomes: 0 };
+      byDay[day].outcomes += row.count;
+    });
+
+    const merged = Object.keys(byDay).sort().map(date => ({
+      date,
+      cost: byDay[date].cost,
+      tokens: byDay[date].tokens,
+      outcomes: byDay[date].outcomes
+    }));
 
     return NextResponse.json(merged, { status: 200 });
   } catch (error: any) {

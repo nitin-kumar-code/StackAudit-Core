@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS provider_sync_state (
 );
 
 -- 7. RPC Updates: TEXT casting for precision, UTC timezone, STABLE, and unpriced tracking
+DROP FUNCTION IF EXISTS aggregate_cost_and_outcomes(UUID, UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ);
+
 CREATE OR REPLACE FUNCTION aggregate_cost_and_outcomes(
     p_organization_id UUID,
     p_workload_id UUID,
@@ -77,6 +79,8 @@ BEGIN
     FROM cost_agg c, outcome_agg o;
 END;
 $$ LANGUAGE plpgsql SECURITY INVOKER STABLE;
+
+DROP FUNCTION IF EXISTS aggregate_daily_cost_and_outcomes(UUID, UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ);
 
 CREATE OR REPLACE FUNCTION aggregate_daily_cost_and_outcomes(
     p_organization_id UUID,

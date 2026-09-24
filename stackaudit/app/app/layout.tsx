@@ -17,13 +17,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, [router]);
   return (
-    <div className="flex h-screen bg-[#f9fafb] text-sm">
+    <div className="flex h-screen bg-background text-base">
       {/* Sidebar */}
-      <aside className="w-64 border-r bg-white flex flex-col hidden md:flex">
-        <div className="h-16 flex items-center px-6 border-b font-medium tracking-tight">
+      <aside className="w-72 border-r border-border bg-sidebar flex flex-col hidden md:flex">
+        <div className="h-16 flex items-center px-6 border-b border-border text-xl font-semibold tracking-tight text-foreground">
           AI Cost Intelligence
         </div>
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1.5">
           <NavItem href="/app/dashboard" icon={LayoutDashboard}>Overview</NavItem>
           <NavItem href="/app/workloads" icon={Server}>Workloads</NavItem>
           <NavItem href="/app/usage" icon={Activity}>Usage</NavItem>
@@ -31,24 +31,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <NavItem href="/app/audits" icon={ShieldAlert}>Audits</NavItem>
           <NavItem href="/app/alerts" icon={Bell}>Alerts</NavItem>
         </nav>
-        <div className="p-4 border-t">
+        <div className="p-4 border-t border-border">
           <NavItem href="/app/settings" icon={Settings}>Settings</NavItem>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-16 border-b bg-white flex items-center px-6 justify-between shrink-0">
-          <div className="font-medium text-gray-800 hidden md:block">Organization Dashboard</div>
+        <header className="h-16 border-b border-border bg-background flex items-center px-6 justify-between shrink-0">
+          <div className="font-medium text-foreground hidden md:block">Organization Dashboard</div>
           <div className="flex items-center space-x-4">
             {/* Global Date Range Picker placeholder */}
-            <div className="text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded">
+            <div className="text-sm text-muted-foreground bg-secondary px-3 py-1.5 rounded-full shadow-sm border border-border">
               Last 90 Days
             </div>
           </div>
         </header>
-        <div className="flex-1 overflow-auto p-6">
-          {children}
+        <div className="flex-1 overflow-auto p-6 md:p-8">
+          <div className="max-w-6xl mx-auto">
+            {children}
+          </div>
         </div>
       </main>
     </div>
@@ -57,8 +59,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
 function NavItem({ href, icon: Icon, children }: { href: string; icon: any; children: React.ReactNode }) {
   return (
-    <Link href={href} className="flex items-center px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors">
-      <Icon className="w-4 h-4 mr-3 text-gray-400" />
+    <Link href={href} className="flex items-center px-3 py-2.5 text-foreground/80 hover:bg-secondary hover:text-foreground rounded-xl transition-colors font-medium">
+      <Icon className="w-5 h-5 mr-3 opacity-80 stroke-[1.5]" />
       {children}
     </Link>
   );

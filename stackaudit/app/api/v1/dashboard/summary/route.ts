@@ -17,19 +17,31 @@ export async function GET(req: Request) {
     const startTime = new Date(startParam);
     const endTime = new Date(endParam);
 
-    // 1. Total Cost & Usage
-    const { data: usageData, error: usageError } = await supabaseAdmin.rpc('aggregate_dashboard_metrics', {
-      p_organization_id: orgId,
-      p_start_time: startTime.toISOString(),
-      p_end_time: endTime.toISOString()
-    });
+    // 1. Total Cost & Usage (Aggregation in JS to avoid requiring remote DB migrations)
+    const { data: rawUsage, error: usageError } = await supabaseAdmin
+      .from('usage_events')
+      .select('calculated_cost, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, request_count, is_unpriced')
+      .eq('organization_id', orgId)
+      .gte('timestamp', startTime.toISOString())
+      .lt('timestamp', endTime.toISOString());
 
     if (usageError) throw new Error(`Failed to load usage: ${usageError.message}`);
 
-    const usageRow = usageData?.[0] || {};
-    const totalCost = parseFloat(usageRow.total_cost || '0');
-    const totalTokens = parseFloat(usageRow.total_tokens || '0');
-    const totalRequests = parseInt(usageRow.request_count || '0', 10);
+    let totalCostNum = 0;
+    let totalTokensNum = 0;
+    let requestCountNum = 0;
+    let unpricedCount = 0;
+
+    (rawUsage || []).forEach((row: any) => {
+      totalCostNum += parseFloat(row.calculated_cost || '0');
+      totalTokensNum += (row.input_tokens || 0) + (row.output_tokens || 0) + (row.cache_read_tokens || 0) + (row.cache_creation_tokens || 0);
+      requestCountNum += (row.request_count || 0);
+      if (row.is_unpriced) unpricedCount++;
+    });
+
+    const totalCost = totalCostNum;
+    const totalTokens = totalTokensNum;
+    const totalRequests = requestCountNum;
 
     // 2. Active Alerts Count
     const { count: alertsCount, error: alertsError } = await supabaseAdmin

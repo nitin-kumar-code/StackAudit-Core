@@ -2,6 +2,7 @@
 ALTER TABLE outcome_events ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 
 -- Enforce uniqueness of idempotency_key per workload
+ALTER TABLE outcome_events DROP CONSTRAINT IF EXISTS unique_workload_idempotency;
 ALTER TABLE outcome_events ADD CONSTRAINT unique_workload_idempotency UNIQUE (workload_id, idempotency_key);
 
 -- Add indexes for outcome querying and aggregation
@@ -15,6 +16,8 @@ CREATE INDEX IF NOT EXISTS idx_outcome_events_workload_type_time ON outcome_even
 CREATE INDEX IF NOT EXISTS idx_usage_events_timestamp ON usage_events (timestamp);
 
 -- RPC for aggregating overall cost and outcomes efficiently
+DROP FUNCTION IF EXISTS aggregate_cost_and_outcomes(UUID, UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ);
+
 CREATE OR REPLACE FUNCTION aggregate_cost_and_outcomes(
     p_organization_id UUID,
     p_workload_id UUID,
@@ -53,6 +56,8 @@ END;
 $$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -- RPC for historical daily aggregation
+DROP FUNCTION IF EXISTS aggregate_daily_cost_and_outcomes(UUID, UUID, TEXT, TIMESTAMPTZ, TIMESTAMPTZ);
+
 CREATE OR REPLACE FUNCTION aggregate_daily_cost_and_outcomes(
     p_organization_id UUID,
     p_workload_id UUID,
