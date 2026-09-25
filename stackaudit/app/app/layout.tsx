@@ -41,10 +41,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <header className="h-16 border-b border-border bg-background flex items-center px-6 justify-between shrink-0">
           <div className="font-medium text-foreground hidden md:block">Organization Dashboard</div>
           <div className="flex items-center space-x-4">
-            {/* Global Date Range Picker placeholder */}
-            <div className="text-sm text-muted-foreground bg-secondary px-3 py-1.5 rounded-full shadow-sm border border-border">
-              Last 90 Days
-            </div>
+            {/* Global Date Range Picker replaced by page-level selectors */}
           </div>
         </header>
         <div className="flex-1 overflow-auto p-6 md:p-8">
