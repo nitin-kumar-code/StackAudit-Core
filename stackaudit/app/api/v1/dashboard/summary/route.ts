@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../lib/supabase/client';
 import { getAuthOrgId, UnauthorizedError, ForbiddenError } from '../../../../../lib/auth';
-import { OutcomeService } from '../../../../../core/outcomes/service';
+import { aggregateUsageCosts, calculateCostPerOutcome, getRequestCount, getTotalTokenCount } from '../../../../../core/usage/metrics';
 
 export async function GET(req: Request) {
   try {
@@ -21,22 +21,18 @@ export async function GET(req: Request) {
     const [
       { data: workloads },
       { data: rules },
-      { data: rawUsage },
-      { data: outcomesData }
+      { data: rawUsage }
     ] = await Promise.all([
       supabaseAdmin.from('workloads').select('id, name').eq('organization_id', orgId),
-      supabaseAdmin.from('attribution_rules').select('workload_id, match_value').eq('organization_id', orgId),
+      supabaseAdmin.from('attribution_rules').select('workload_id, provider, match_type, match_value').eq('organization_id', orgId),
       supabaseAdmin.from('usage_events')
-        .select('calculated_cost, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, request_count, api_key_id')
+        .select('calculated_cost, is_unpriced, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, request_count, api_key_id, provider')
         .eq('organization_id', orgId)
         .gte('timestamp', startTime.toISOString())
         .lt('timestamp', endTime.toISOString()),
-      supabaseAdmin.from('outcome_events')
-        .select('workload_id, outcome_type, count')
-        .in('workload_id', [orgId]) // Workaround for remote schema query
     ]);
     
-    // Fallback: we should fetch outcome_events sequentially so we can use the workload IDs.
+    // Scope outcomes to workload IDs belonging to the authenticated organization.
     const workloadIds = (workloads || []).map(w => w.id);
     const { data: realOutcomes } = await supabaseAdmin.from('outcome_events')
       .select('workload_id, outcome_type, count')
@@ -51,35 +47,36 @@ export async function GET(req: Request) {
       .order('created_at', { ascending: false });
 
     // Map api_key -> workload_id
-    const keyToWorkload = (rules || []).reduce((acc: any, curr) => {
-      acc[curr.match_value] = curr.workload_id;
+    const keyToWorkload = (rules || []).reduce((acc: Record<string, string>, curr) => {
+      if (curr.match_type?.toLowerCase() === 'api_key') acc[`${curr.provider}:${curr.match_value}`] = curr.workload_id;
       return acc;
     }, {});
 
     // Aggregations
-    let totalCostNum = 0;
+    const costRows: any[] = [];
+    const attributedCostRows: any[] = [];
+    const unattributedCostRows: any[] = [];
     let totalTokensNum = 0;
     let requestCountNum = 0;
     
-    const workloadAgg: Record<string, { cost: number; usage: number; outcomes: number; name: string }> = {};
+    const workloadAgg: Record<string, { costs: any[]; usage: number; outcomes: number; outcomeTypes: Record<string, number>; name: string }> = {};
     (workloads || []).forEach(w => {
-      workloadAgg[w.id] = { cost: 0, usage: 0, outcomes: 0, name: w.name };
+      workloadAgg[w.id] = { costs: [], usage: 0, outcomes: 0, outcomeTypes: {}, name: w.name };
     });
 
     // Process Usage
     (rawUsage || []).forEach(row => {
-      const cost = parseFloat(row.calculated_cost || '0');
-      const tokens = (row.input_tokens || 0) + (row.output_tokens || 0) + (row.cache_read_tokens || 0) + (row.cache_creation_tokens || 0);
-      
-      totalCostNum += cost;
+      const tokens = getTotalTokenCount(row);
+      costRows.push(row);
       totalTokensNum += tokens;
-      requestCountNum += (row.request_count || 0);
+      requestCountNum += getRequestCount(row.request_count);
       
-      const wId = row.api_key_id ? keyToWorkload[row.api_key_id] : null;
+      const wId = row.api_key_id ? keyToWorkload[`${row.provider}:${row.api_key_id}`] : null;
       if (wId && workloadAgg[wId]) {
-        workloadAgg[wId].cost += cost;
+        attributedCostRows.push(row);
+        workloadAgg[wId].costs.push(row);
         workloadAgg[wId].usage += tokens;
-      }
+      } else unattributedCostRows.push(row);
     });
 
     // Process Outcomes
@@ -87,40 +84,31 @@ export async function GET(req: Request) {
     const outcomeCounts: Record<string, number> = {};
     
     (realOutcomes || []).forEach(row => {
-      totalOutcomes += row.count;
-      outcomeCounts[row.outcome_type] = (outcomeCounts[row.outcome_type] || 0) + row.count;
+      totalOutcomes += Number(row.count);
+      outcomeCounts[row.outcome_type] = (outcomeCounts[row.outcome_type] || 0) + Number(row.count);
       if (row.workload_id && workloadAgg[row.workload_id]) {
-        workloadAgg[row.workload_id].outcomes += row.count;
+        workloadAgg[row.workload_id].outcomes += Number(row.count);
+        workloadAgg[row.workload_id].outcomeTypes[row.outcome_type] = (workloadAgg[row.workload_id].outcomeTypes[row.outcome_type] || 0) + Number(row.count);
       }
     });
 
-    // Cost Per Outcome Top Level
-    const outcomeTypes = Object.keys(outcomeCounts);
-    let primaryCpo = null;
-    if (outcomeTypes.length === 1) {
-      primaryCpo = {
-        outcomeType: outcomeTypes[0],
-        costPerOutcome: totalOutcomes > 0 ? (totalCostNum / totalOutcomes).toFixed(4) : null,
-        note: 'Aggregated CPO across all workloads.'
-      };
-    } else if (outcomeTypes.length > 1) {
-      primaryCpo = {
-        outcomeType: 'Multiple',
-        costPerOutcome: null,
-        note: 'Multiple outcome types exist. Please view Workloads for specific metrics.'
-      };
-    }
+    const totalCosts = aggregateUsageCosts(costRows);
+    const attributedCosts = aggregateUsageCosts(attributedCostRows);
+    const unattributedCosts = aggregateUsageCosts(unattributedCostRows);
 
     // Format Workload Summaries
     const workloadSummaries = Object.entries(workloadAgg).map(([id, agg]) => ({
       id,
       name: agg.name,
-      cost: agg.cost,
+      cost: aggregateUsageCosts(agg.costs).totalCost,
+      knownCost: aggregateUsageCosts(agg.costs).knownCost,
+      isCostComplete: aggregateUsageCosts(agg.costs).isComplete,
+      unpricedEventCount: aggregateUsageCosts(agg.costs).unpricedEventCount,
       usage: agg.usage,
       outcomes: agg.outcomes,
-      costPerOutcome: agg.outcomes > 0 ? agg.cost / agg.outcomes : null,
+      costPerOutcome: Object.keys(agg.outcomeTypes).length === 1 ? calculateCostPerOutcome(aggregateUsageCosts(agg.costs), agg.outcomes).value : null,
       changePct: null
-    })).sort((a, b) => b.cost - a.cost);
+    })).sort((a, b) => Number(b.knownCost || 0) - Number(a.knownCost || 0));
 
     // Format Alerts & Evidence
     const recentAlerts = (realAlerts || []).slice(0, 3).map(a => ({
@@ -154,13 +142,23 @@ export async function GET(req: Request) {
     }));
 
     return NextResponse.json({
-      totalCost: totalCostNum,
+      totalCost: totalCosts.totalCost,
+      knownCost: totalCosts.knownCost,
+      isCostComplete: totalCosts.isComplete,
+      pricedEventCount: totalCosts.pricedEventCount,
+      unpricedEventCount: totalCosts.unpricedEventCount,
+      attributedCost: attributedCosts.totalCost,
+      attributedKnownCost: attributedCosts.knownCost,
+      unattributedCost: unattributedCosts.totalCost,
+      unattributedKnownCost: unattributedCosts.knownCost,
+      unattributedIsCostComplete: unattributedCosts.isComplete,
+      unattributedEventCount: unattributedCostRows.length,
       totalTokens: totalTokensNum,
       totalRequests: requestCountNum,
       activeAlerts: activeAlertsCount,
       outcomes: {
         totalCount: totalOutcomes,
-        primaryCpo
+        primaryCpo: { costPerOutcome: null, availabilityReason: 'Organization-wide cost per outcome is unavailable because organization cost cannot be matched to a single workload and outcome type.' }
       },
       workloadSummaries,
       recentAlerts,

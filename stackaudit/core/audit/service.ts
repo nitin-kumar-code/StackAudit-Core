@@ -4,6 +4,8 @@ import { AuditFinding, AuditCategory } from '../types';
 import { AuditEngine, AuditEngineResult } from './engine';
 import { ALL_RULES } from './rules';
 import { WorkloadNotFoundError, ValidationError } from '../workloads/service';
+import { getRequestCount, getTotalTokenCount } from '../usage/metrics';
+import Big from 'big.js';
 
 export interface RunAuditDTO {
   workloadId: string;
@@ -123,17 +125,16 @@ export class AuditService {
   private async loadMetrics(orgId: string, workloadId: string, window: TimeWindow): Promise<MetricSummary> {
     const { data: rules } = await this.supabase
       .from('attribution_rules')
-      .select('match_value')
+      .select('provider, match_type, match_value')
       .eq('organization_id', orgId)
       .eq('workload_id', workloadId);
       
-    const apiKeys = (rules || []).map(r => r.match_value);
+    const apiKeys = (rules || []).filter(r => r.match_type?.toLowerCase() === 'api_key').map(r => `${r.provider}:${r.match_value}`);
     
     const { data: rawUsage, error } = await this.supabase
       .from('usage_events')
-      .select('calculated_cost, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, request_count, model')
+      .select('calculated_cost, is_unpriced, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, request_count, model, provider, api_key_id')
       .eq('organization_id', orgId)
-      .in('api_key_id', apiKeys.length ? apiKeys : ['00000000-0000-0000-0000-000000000000'])
       .gte('timestamp', window.start.toISOString())
       .lt('timestamp', window.end.toISOString());
 
@@ -143,35 +144,39 @@ export class AuditService {
       return { totalCost: 0, totalTokens: 0, requestCount: 0, unpricedEvents: 0, models: {} };
     }
     
-    let totalCost = 0;
+    let totalCost = new Big(0);
     let totalTokens = 0;
     let reqCount = 0;
+    let unpricedEvents = 0;
     const modelMap: Record<string, { cost: number; tokens: number; requests: number }> = {};
+    const modelCosts: Record<string, Big> = {};
 
     rawUsage.forEach(row => {
-      const cost = parseFloat(row.calculated_cost || '0');
-      const tokens = (row.input_tokens || 0) + (row.output_tokens || 0) + (row.cache_read_tokens || 0) + (row.cache_creation_tokens || 0);
-      const reqs = (row.request_count || 1);
+      if (!apiKeys.includes(`${row.provider}:${row.api_key_id}`)) return;
+      const cost = row.is_unpriced ? null : new Big(String(row.calculated_cost ?? 0));
+      const tokens = getTotalTokenCount(row);
+      const reqs = getRequestCount(row.request_count);
       
-      totalCost += cost;
+      if (cost) totalCost = totalCost.plus(cost); else unpricedEvents++;
       totalTokens += tokens;
       reqCount += reqs;
       
       const modelKey = row.model || 'unknown';
       if (!modelMap[modelKey]) {
         modelMap[modelKey] = { cost: 0, tokens: 0, requests: 0 };
+        modelCosts[modelKey] = new Big(0);
       }
-      modelMap[modelKey].cost += cost;
+      if (cost) modelCosts[modelKey] = modelCosts[modelKey].plus(cost);
       modelMap[modelKey].tokens += tokens;
       modelMap[modelKey].requests += reqs;
     });
 
     return {
-      totalCost,
+      totalCost: Number(totalCost.toString()),
       totalTokens,
       requestCount: reqCount,
-      unpricedEvents: 0,
-      models: modelMap
+      unpricedEvents,
+      models: Object.fromEntries(Object.entries(modelMap).map(([model, metrics]) => [model, { ...metrics, cost: Number(modelCosts[model].toString()) }]))
     };
   }
 

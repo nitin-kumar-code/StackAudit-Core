@@ -10,14 +10,31 @@ export interface CostPerOutcomeResult {
   outcomeType: string;
   startTime: Date;
   endTime: Date;
-  totalCost: string; // Decimal string
+  /** Authoritative total; null if any usage in this workload/window is unpriced. */
+  totalCost: string | null;
+  /** Decimal-safe subtotal for priced usage. Null when no events were priced. */
+  knownCost: string | null;
+  isCostComplete: boolean;
+  pricedEventCount: number;
   totalOutcomeCount: number;
   costPerOutcome: string | null; // Decimal string, null if count is 0
   unpricedEventCount: number;
+  availabilityReason: string | null;
   currency: string;
   costAllocationNote?: string;
 }
-export interface CostPerOutcomeDataPoint { periodStart: Date; periodEnd: Date; totalCost: string; outcomeCount: number; costPerOutcome: string | null; unpricedEventCount: number; }
+export interface CostPerOutcomeDataPoint {
+  periodStart: Date;
+  periodEnd: Date;
+  totalCost: string | null;
+  knownCost: string | null;
+  isCostComplete: boolean;
+  pricedEventCount: number;
+  outcomeCount: number;
+  costPerOutcome: string | null;
+  unpricedEventCount: number;
+  availabilityReason: string | null;
+}
 export type AuditCategory = 'USAGE_SPIKE' | 'COST_DRIFT' | 'TOKEN_EFFICIENCY' | 'MODEL_MIX' | 'RETRY_PATTERN';
 export type Severity = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH';
 export type Confidence = 'LOW' | 'MEDIUM' | 'HIGH';

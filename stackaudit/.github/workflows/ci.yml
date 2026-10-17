@@ -21,6 +21,12 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    - name: Typecheck
+      run: npm run typecheck
+
+    - name: Lint
+      run: npm run lint
+
     - name: Run Unit Tests
       run: npm run test:unit
 
@@ -31,16 +37,29 @@ jobs:
 
     - name: Start Supabase Local Stack
       run: supabase start
+
+    - name: Export local Supabase credentials
+      run: |
+        SERVICE_ROLE_KEY="$(supabase status -o env | sed -n 's/^SERVICE_ROLE_KEY=//p' | tr -d '"')"
+        if [ -z "$SERVICE_ROLE_KEY" ]; then
+          echo "Could not read the local Supabase service-role key from the CLI."
+          exit 1
+        fi
+        echo "NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321" >> "$GITHUB_ENV"
+        echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
       
     - name: Generate Types and Apply Migrations
       run: |
+        supabase db reset
         supabase gen types typescript --local > database.types.ts
-        supabase db push
+
+    - name: Production build
+      run: npm run build
 
     - name: Run Integration Tests
       env:
-        NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJh...' }}
+        NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
       run: |
         if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
           echo "Error: SUPABASE_SERVICE_ROLE_KEY is required but missing in CI environment!"

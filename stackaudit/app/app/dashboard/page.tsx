@@ -66,17 +66,20 @@ export default function DashboardPage() {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <MetricCard title="Total Cost" value={`$${summary.totalCost?.toFixed(2) || '0.00'}`} />
+            <MetricCard
+              title="Total Cost"
+              value={summary.totalCost != null ? `$${Number(summary.totalCost).toFixed(2)}` : summary.knownCost != null ? `$${Number(summary.knownCost).toFixed(2)} partial` : 'Unavailable'}
+              subtitle={[
+                summary.isCostComplete === false ? `${summary.unpricedEventCount} events have unknown pricing` : null,
+                summary.unattributedEventCount > 0 ? `${summary.unattributedEventCount} unassigned events (${summary.unattributedKnownCost != null ? `$${Number(summary.unattributedKnownCost).toFixed(2)} known cost` : 'cost unavailable'})` : null
+              ].filter(Boolean).join(' · ') || undefined}
+            />
             
             <MetricCard 
               title="Cost / Outcome" 
               value={summary.outcomes?.primaryCpo?.costPerOutcome ? `$${Number(summary.outcomes.primaryCpo.costPerOutcome).toFixed(3)}` : '—'} 
               subtitle={
-                !summary.outcomes?.primaryCpo 
-                  ? 'No outcome data. Record outcomes to calculate CPO.'
-                  : summary.outcomes.primaryCpo.outcomeType === 'Multiple'
-                  ? 'Multiple types (see Workloads →)'
-                  : summary.outcomes.primaryCpo.outcomeType
+                summary.outcomes?.primaryCpo?.availabilityReason || (summary.outcomes?.primaryCpo?.outcomeType === 'Multiple' ? 'Multiple types exist; view workload-specific metrics.' : 'View workload and outcome-specific metrics.')
               }
             />
             
@@ -159,7 +162,7 @@ export default function DashboardPage() {
                           <Link href={`/app/workloads/${w.id}`} className="absolute inset-0 z-10"></Link>
                           {w.name}
                         </td>
-                        <td className="px-6 py-4">${w.cost.toFixed(2)}</td>
+                        <td className="px-6 py-4">{w.cost !== null ? `$${Number(w.cost).toFixed(2)}` : w.knownCost !== null ? `$${Number(w.knownCost).toFixed(2)} partial` : 'Unavailable'}</td>
                         <td className="px-6 py-4 text-muted-foreground">{formatNumber(w.usage)} tkns</td>
                         <td className="px-6 py-4">{formatNumber(w.outcomes)}</td>
                         <td className="px-6 py-4 font-medium">{w.costPerOutcome ? `$${w.costPerOutcome.toFixed(3)}` : '—'}</td>
@@ -233,18 +236,14 @@ export default function DashboardPage() {
 }
 
 function TrendChart({ trends }: { trends: any[] }) {
-  const [metric, setMetric] = useState<'cost' | 'cpo' | 'tokens' | 'outcomes'>('cpo');
+  const [metric, setMetric] = useState<'cost' | 'tokens' | 'outcomes'>('cost');
 
   if (!trends || !trends.length) return <div className="h-64 flex items-center justify-center text-muted-foreground">No trend data available.</div>;
 
-  const chartData = trends.map(t => ({
-    ...t,
-    cpo: t.outcomes > 0 ? t.cost / t.outcomes : 0
-  }));
+  const chartData = trends.map(t => ({ ...t, cost: t.cost === null ? null : Number(t.cost) }));
 
   const config = {
     cost: { key: 'cost', color: '#171717', formatter: (val: number) => `$${val.toFixed(2)}`, label: 'Total Cost' },
-    cpo: { key: 'cpo', color: '#171717', formatter: (val: number) => `$${val.toFixed(3)}`, label: 'Cost / Outcome' },
     tokens: { key: 'tokens', color: '#171717', formatter: (val: number) => formatNumber(val), label: 'Tokens' },
     outcomes: { key: 'outcomes', color: '#171717', formatter: (val: number) => formatNumber(val), label: 'Outcomes' },
   };

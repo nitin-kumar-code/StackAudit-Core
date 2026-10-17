@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import Big from 'big.js';
 import { OutcomeEvent, CostPerOutcomeResult, CostPerOutcomeDataPoint, ConflictError } from '../types';
 import { WorkloadNotFoundError, ValidationError } from '../workloads/service';
+import { calculateCostPerOutcome } from '../usage/metrics';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -129,25 +129,34 @@ export class OutcomeService {
 
     if (error) throw new Error(`Failed to calculate cost per outcome: ${error.message}`);
 
-    const result = data[0] || { total_cost: '0', total_outcomes: '0', unpriced_events: 0, as_of: null };
-    const totalCostStr = String(result.total_cost || '0');
+    const result = data?.[0] || { known_cost: '0', total_cost: '0', total_outcomes: '0', unpriced_events: 0, priced_events: 0 };
     const totalOutcomeCount = Number(result.total_outcomes || 0);
-
-    let costPerOutcome: string | null = null;
-    if (totalOutcomeCount > 0) {
-      const cpo = new Big(totalCostStr).div(totalOutcomeCount);
-      costPerOutcome = cpo.toString();
-    }
+    const unpricedEventCount = Number(result.unpriced_events || 0);
+    const pricedEventCount = Number(result.priced_events || 0);
+    const isCostComplete = unpricedEventCount === 0;
+    const knownCost = pricedEventCount > 0 || unpricedEventCount === 0 ? String(result.known_cost ?? '0') : null;
+    const totalCost = isCostComplete ? String(result.total_cost ?? '0') : null;
+    const cpo = calculateCostPerOutcome({
+      knownCost,
+      totalCost,
+      isComplete: isCostComplete,
+      pricedEventCount,
+      unpricedEventCount
+    }, totalOutcomeCount);
 
     return {
       workloadId,
       outcomeType,
       startTime,
       endTime,
-      totalCost: totalCostStr,
+      totalCost,
+      knownCost,
+      isCostComplete,
+      pricedEventCount,
       totalOutcomeCount,
-      costPerOutcome,
-      unpricedEventCount: Number(result.unpriced_events || 0),
+      costPerOutcome: cpo.value,
+      unpricedEventCount,
+      availabilityReason: cpo.reason,
       
       currency: 'USD',
       costAllocationNote: 'Unallocated. This workload cost per outcome represents the total workload cost divided by this outcome type. It does not partition cost among different outcome types.'
@@ -173,22 +182,26 @@ export class OutcomeService {
 
     if (error) throw new Error(`Failed to calculate daily cost per outcome: ${error.message}`);
 
-    return data.map((d: any) => {
-      const totalCostStr = String(d.total_cost || '0');
+    return (data || []).map((d: any) => {
       const outcomeCount = Number(d.total_outcomes || 0);
-      let costPerOutcome: string | null = null;
-      
-      if (outcomeCount > 0) {
-        costPerOutcome = new Big(totalCostStr).div(outcomeCount).toString();
-      }
+      const unpricedEventCount = Number(d.unpriced_events || 0);
+      const pricedEventCount = Number(d.priced_events || 0);
+      const isCostComplete = unpricedEventCount === 0;
+      const knownCost = pricedEventCount > 0 || unpricedEventCount === 0 ? String(d.known_cost ?? '0') : null;
+      const totalCost = isCostComplete ? String(d.total_cost ?? '0') : null;
+      const cpo = calculateCostPerOutcome({ knownCost, totalCost, isComplete: isCostComplete, pricedEventCount, unpricedEventCount }, outcomeCount);
 
       return {
         periodStart: new Date(d.period_start),
         periodEnd: new Date(new Date(d.period_start).getTime() + 86400000), 
-        totalCost: totalCostStr,
+        totalCost,
+        knownCost,
+        isCostComplete,
+        pricedEventCount,
         outcomeCount,
-        costPerOutcome,
-        unpricedEventCount: Number(d.unpriced_events || 0)
+        costPerOutcome: cpo.value,
+        unpricedEventCount,
+        availabilityReason: cpo.reason
       };
     });
   }

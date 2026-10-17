@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { MonitoringService } from '../core/monitoring/monitoring-service';
+import { calculateCost } from '../core/pricing/calculator';
+import { CanonicalUsageEvent, PricingRecord } from '../core/types';
 
 function mulberry32(a: number) {
   return function() {
@@ -28,21 +30,40 @@ function fakeUUID(seedNum: number) {
   return `00000000-0000-4000-8000-${hex}`;
 }
 
-const PRICING = {
+const PRICING: Record<string, Record<string, { input: string; output: string }>> = {
   'openai': {
-    'gpt-4o-mini': { input: 0.150 / 1000000, output: 0.600 / 1000000 },
-    'gpt-4o': { input: 5.00 / 1000000, output: 15.00 / 1000000 }
+    'gpt-4o-mini': { input: '0.15', output: '0.60' },
+    'gpt-4o': { input: '5.00', output: '15.00' }
   },
   'anthropic': {
-    'claude-3-haiku-20240307': { input: 0.25 / 1000000, output: 1.25 / 1000000 },
-    'claude-3-sonnet-20240229': { input: 3.00 / 1000000, output: 15.00 / 1000000 }
+    'claude-3-haiku-20240307': { input: '0.25', output: '1.25' },
+    'claude-3-sonnet-20240229': { input: '3.00', output: '15.00' }
   }
-} as any;
+} as const;
 
 function getCost(provider: string, model: string, inputTokens: number, outputTokens: number) {
-  const p = PRICING[provider]?.[model];
-  if (!p) return 0;
-  return (inputTokens * p.input) + (outputTokens * p.output);
+  const rates = PRICING[provider]?.[model];
+  if (!rates) throw new Error(`No demo pricing configured for ${provider}/${model}`);
+  const pricing: PricingRecord = {
+    id: `demo-${provider}-${model}`,
+    provider,
+    model,
+    inputPrice: rates.input,
+    outputPrice: rates.output,
+    effectiveFrom: new Date('2000-01-01T00:00:00.000Z'),
+    source: 'Simulated demo pricing; not a provider quote'
+  };
+  const event: CanonicalUsageEvent = {
+    id: 'demo-calculation',
+    provider,
+    model,
+    timestamp: new Date(),
+    usage: { inputTokens, outputTokens },
+    attribution: {},
+    providerReference: 'demo-calculation',
+    rawResponseHash: 'demo-calculation'
+  };
+  return calculateCost(event, pricing).totalCost;
 }
 
 function getSeasonalMultiplier(dayOffset: number, dayOfWeek: number) {
@@ -62,7 +83,15 @@ async function seed() {
   });
 
   const supabaseUrl = env['NEXT_PUBLIC_SUPABASE_URL'] || 'http://localhost:54321';
-  const supabaseKey = env['SUPABASE_SERVICE_ROLE_KEY'] || 'fake';
+  const supabaseKey = env['SUPABASE_SERVICE_ROLE_KEY'];
+  if (!supabaseKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required. Set it in .env.local before seeding.');
+  }
+  const supabaseHostname = new URL(supabaseUrl).hostname;
+  const isLocalSupabase = ['127.0.0.1', 'localhost', '[::1]'].includes(supabaseHostname);
+  if (!isLocalSupabase && env['DEMO_SEED_ALLOW_REMOTE'] !== 'true') {
+    throw new Error('Refusing to seed a remote database. Set DEMO_SEED_ALLOW_REMOTE=true only when this is intentional.');
+  }
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   console.log('Seeding Realistic Demo Data for Phase 10 Dashboard...');
@@ -96,12 +125,16 @@ async function seed() {
   ], { onConflict: 'id' });
   
   // Clean up old data for this org to prevent buildup
-  await supabase.from('usage_events').delete().eq('organization_id', orgId);
-  await supabase.from('outcome_events').delete().eq('organization_id', orgId); // Workaround: outcomes lack orgId? Wait, the new schema lacks it. Let's delete by workload.
-  await supabase.from('outcome_events').delete().in('workload_id', [wSupport, wDoc, wSales]);
-  await supabase.from('alerts').delete().eq('organization_id', orgId);
-  await supabase.from('audit_findings').delete().eq('organization_id', orgId);
-  await supabase.from('monitoring_configs').delete().eq('organization_id', orgId);
+  const demoWorkloadIds = [wSupport, wDoc, wSales];
+  const cleanupResults = await Promise.all([
+    supabase.from('usage_events').delete().eq('organization_id', orgId),
+    supabase.from('outcome_events').delete().in('workload_id', demoWorkloadIds),
+    supabase.from('alerts').delete().eq('organization_id', orgId),
+    supabase.from('audit_findings').delete().eq('organization_id', orgId),
+    supabase.from('monitoring_configs').delete().eq('organization_id', orgId)
+  ]);
+  const cleanupError = cleanupResults.find(result => result.error)?.error;
+  if (cleanupError) throw new Error(`Could not clear prior demo dataset: ${cleanupError.message}`);
 
   const usageEvents = [];
   const outcomeEvents = [];
@@ -189,8 +222,8 @@ async function seed() {
     }
 
     // Outcomes: Probability of ticket resolved falls during spike (complex issues)
-    let resolveRate = offset <= 14 && offset >= 2 ? 0.65 : 0.85;
-    let resolvedCount = Math.round(supportReqs * resolveRate) + randInt(-20, 20);
+    const resolveRate = offset <= 14 && offset >= 2 ? 0.65 : 0.85;
+    const resolvedCount = Math.round(supportReqs * resolveRate) + randInt(-20, 20);
     outcomeEvents.push({
       id: crypto.randomUUID(),
       workload_id: wSupport,
@@ -202,9 +235,9 @@ async function seed() {
     // ==========================================
     // Workload B: Document Summarization (Healthy)
     // ==========================================
-    let docReqs = Math.round(200 * seasonMult) + randInt(-15, 15);
-    let docInputPerReq = 5000 + randInt(-1000, 1000);
-    let docOutputPerReq = 800 + randInt(-200, 200);
+    const docReqs = Math.round(200 * seasonMult) + randInt(-15, 15);
+    const docInputPerReq = 5000 + randInt(-1000, 1000);
+    const docOutputPerReq = 800 + randInt(-200, 200);
 
     const docCost = getCost('anthropic', 'claude-3-haiku-20240307', docReqs * docInputPerReq, docReqs * docOutputPerReq);
     usageEvents.push({
@@ -234,10 +267,10 @@ async function seed() {
     // ==========================================
     // Workload C: Sales Research (Variable, Spiky)
     // ==========================================
-    let salesMult = randRange(0.6, 1.5);
-    let salesReqs = Math.round(150 * seasonMult * salesMult);
-    let salesInputPerReq = 12000 + randInt(-3000, 3000);
-    let salesOutputPerReq = 1500 + randInt(-500, 500);
+    const salesMult = randRange(0.6, 1.5);
+    const salesReqs = Math.round(150 * seasonMult * salesMult);
+    const salesInputPerReq = 12000 + randInt(-3000, 3000);
+    const salesOutputPerReq = 1500 + randInt(-500, 500);
 
     const salesCost = getCost('anthropic', 'claude-3-sonnet-20240229', salesReqs * salesInputPerReq, salesReqs * salesOutputPerReq);
     usageEvents.push({
@@ -258,7 +291,7 @@ async function seed() {
     });
     
     // Outcomes: Variable completion
-    let researchCount = Math.round(salesReqs * randRange(0.5, 0.8));
+    const researchCount = Math.round(salesReqs * randRange(0.5, 0.8));
     outcomeEvents.push({
       id: crypto.randomUUID(),
       workload_id: wSales,
@@ -303,12 +336,8 @@ async function seed() {
   const { data: mrun } = await supabase.from('monitoring_runs').select('*').eq('id', runId).single();
   console.log('✅ Monitoring Run Complete:', mrun);
 
-  // Replace old org in env
-  let finalEnv = fs.readFileSync('.env.local', 'utf-8');
-  finalEnv = finalEnv.replace(/^DEMO_ORG_ID=.*$/m, '');
-  finalEnv += `\nDEMO_ORG_ID=${orgId}`;
-  fs.writeFileSync('.env.local', finalEnv.trim() + '\n');
-  console.log(`\n🎉 Dataset complete! New Org ID: ${orgId}`);
+  console.log(`\n🎉 Dataset complete. Demo organization ID: ${orgId}`);
+  console.log('Set DEMO_ORG_ID to this value in .env.local to use the local development fallback.');
 }
 
 seed().catch(console.error);

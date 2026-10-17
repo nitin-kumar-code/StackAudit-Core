@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../lib/supabase/client';
 import { getAuthOrgId, UnauthorizedError, ForbiddenError } from '../../../../../lib/auth';
+import { aggregateUsageCosts, getTotalTokenCount } from '../../../../../core/usage/metrics';
 
 export async function GET(req: Request) {
   try {
@@ -16,7 +17,7 @@ export async function GET(req: Request) {
     // Call usage_events directly to bypass missing RPC on remote DBs
     const { data: rawUsage, error: trendsError } = await supabaseAdmin
       .from('usage_events')
-      .select('timestamp, calculated_cost, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens')
+      .select('timestamp, calculated_cost, is_unpriced, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens')
       .eq('organization_id', orgId)
       .gte('timestamp', startParam)
       .lt('timestamp', endParam);
@@ -41,24 +42,28 @@ export async function GET(req: Request) {
 
     if (outcomesError) throw new Error(`Failed to load outcomes: ${outcomesError.message}`);
 
-    const byDay: Record<string, { cost: number; tokens: number; outcomes: number }> = {};
+    const byDay: Record<string, { costs: any[]; tokens: number; outcomes: number }> = {};
 
     (rawUsage || []).forEach((row: any) => {
       const day = new Date(row.timestamp).toISOString().split('T')[0];
-      if (!byDay[day]) byDay[day] = { cost: 0, tokens: 0, outcomes: 0 };
-      byDay[day].cost += parseFloat(row.calculated_cost || '0');
-      byDay[day].tokens += (row.input_tokens || 0) + (row.output_tokens || 0) + (row.cache_read_tokens || 0) + (row.cache_creation_tokens || 0);
+      if (!byDay[day]) byDay[day] = { costs: [], tokens: 0, outcomes: 0 };
+      byDay[day].costs.push(row);
+      byDay[day].tokens += getTotalTokenCount(row);
     });
 
     (outcomesData || []).forEach((row: any) => {
       const day = new Date(row.timestamp).toISOString().split('T')[0];
-      if (!byDay[day]) byDay[day] = { cost: 0, tokens: 0, outcomes: 0 };
+      if (!byDay[day]) byDay[day] = { costs: [], tokens: 0, outcomes: 0 };
       byDay[day].outcomes += row.count;
     });
 
     const merged = Object.keys(byDay).sort().map(date => ({
       date,
-      cost: byDay[date].cost,
+      cost: aggregateUsageCosts(byDay[date].costs).totalCost,
+      knownCost: aggregateUsageCosts(byDay[date].costs).knownCost,
+      isCostComplete: aggregateUsageCosts(byDay[date].costs).isComplete,
+      pricedEventCount: aggregateUsageCosts(byDay[date].costs).pricedEventCount,
+      unpricedEventCount: aggregateUsageCosts(byDay[date].costs).unpricedEventCount,
       tokens: byDay[date].tokens,
       outcomes: byDay[date].outcomes
     }));

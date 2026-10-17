@@ -106,5 +106,31 @@ describe('OutcomeService', () => {
     it('validates 366 day limit', async () => {
       await expect(service.getCostPerOutcome('org_1', wlId, 'ticket', new Date('2025-01-01'), new Date('2027-01-01'))).rejects.toThrow(/366/);
     });
+
+    it('marks partially priced workload CPO unavailable while preserving known subtotal', async () => {
+      mockRpc.mockResolvedValueOnce({ data: [{ known_cost: '12.5', total_cost: null, total_outcomes: '2', unpriced_events: 1, priced_events: 3 }], error: null });
+      const result = await service.getCostPerOutcome('org_1', wlId, 'ticket', new Date('2026-09-01'), new Date('2026-09-02'));
+      expect(result.knownCost).toBe('12.5');
+      expect(result.totalCost).toBeNull();
+      expect(result.costPerOutcome).toBeNull();
+      expect(result.unpricedEventCount).toBe(1);
+    });
+
+    it('does not divide by zero when no outcomes are recorded', async () => {
+      mockRpc.mockResolvedValueOnce({ data: [{ total_cost: '0', total_outcomes: '0', unpriced_events: 0, priced_events: 0 }], error: null });
+      const result = await service.getCostPerOutcome('org_1', wlId, 'ticket', new Date('2026-09-01'), new Date('2026-09-02'));
+      expect(result.costPerOutcome).toBeNull();
+      expect(result.availabilityReason).toMatch(/No outcomes/);
+    });
+
+    it('passes the exact half-open time window to the database aggregate', async () => {
+      const start = new Date('2026-09-01T00:00:00Z');
+      const end = new Date('2026-09-02T00:00:00Z');
+      mockRpc.mockResolvedValueOnce({ data: [{ total_cost: '4', total_outcomes: '1', unpriced_events: 0, priced_events: 1 }], error: null });
+      await service.getCostPerOutcome('org_1', wlId, 'ticket', start, end);
+      expect(mockRpc).toHaveBeenCalledWith('aggregate_cost_and_outcomes', expect.objectContaining({
+        p_start_time: start.toISOString(), p_end_time: end.toISOString()
+      }));
+    });
   });
 });

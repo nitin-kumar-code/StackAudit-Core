@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# StackAudit
 
-## Getting Started
+StackAudit is a self-hostable AI cost intelligence dashboard. It ingests provider usage records, applies effective-dated pricing, attributes usage to workloads, records business outcomes, and exposes cost, audit, and monitoring views.
 
-First, run the development server:
+This repository is an early preview. The current app includes OpenAI and Anthropic normalizers, CSV and API ingestion paths, a Supabase-backed pricing and usage pipeline, workload attribution, outcomes, audit rules, monitoring, alerts, and dashboard APIs. Authentication and organization setup are still early-stage; review [Security](SECURITY.md) before using it with sensitive or shared data.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Local development
+
+Requirements: Node.js 20+, npm, and the [Supabase CLI](https://supabase.com/docs/guides/cli).
+
+```sh
+npm ci
+cp .env.example .env.local
+supabase start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Set `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` to the local values printed by `supabase status`. Apply migrations with `supabase db reset`, then start the app:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```sh
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The development-only API fallback uses `DEMO_ORG_ID`. The seed command creates the fixed demo organization and prints its ID; copy that ID into `.env.local` and restart the app. The seed command refuses remote Supabase URLs unless `DEMO_SEED_ALLOW_REMOTE=true` is set explicitly. Do not use the service-role key in client-side code.
 
-## Learn More
+## Commands
 
-To learn more about Next.js, take a look at the following resources:
+```sh
+npm run typecheck
+npm run lint
+npm test                 # unit tests
+npm run test:integration # requires a running local Supabase stack and local service-role key
+npm run build
+npm run seed
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `core/providers` normalizes provider-specific usage into canonical events.
+- `core/pricing` resolves effective-dated prices and calculates costs with decimal arithmetic.
+- `core/usage` validates ingestion and reprices records when pricing becomes available.
+- `core/workloads` owns workload and attribution-rule operations.
+- `core/outcomes`, `core/audit`, and `core/monitoring` provide outcome analytics and evidence-based findings/alerts.
+- `app/api/v1` exposes the HTTP boundary; `app/app` contains dashboard pages.
+- `supabase/migrations` is the database schema history.
 
-## Deploy on Vercel
+See subsystem READMEs under `core/` for contracts and behavior. The current deployment still has important limitations: dashboard aggregations are partly implemented in route handlers, the demo generator does not yet use the complete ingestion/pricing pipeline, and integration checks need local Supabase. See `AUDIT_REPORT.md` for the repository audit and known gaps.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Data and privacy
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Use only data you are authorized to process. Do not expose the Supabase service-role key. The current service-role-backed API and development organization fallback are intended for local development and are not a hardened multi-tenant deployment. RLS and production identity/authorization policies are not complete.
+
+## License
+
+No license is currently included. Until the project owner selects and adds a license, users should not assume they have permission to redistribute or modify this code. See the license decision noted in `AUDIT_REPORT.md`.

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../lib/supabase/client';
 import { getAuthOrgId, UnauthorizedError, ForbiddenError } from '../../../../lib/auth';
+import { aggregateUsageCosts, getRequestCount, getTotalTokenCount } from '../../../../core/usage/metrics';
 
 export async function GET(req: Request) {
   try {
@@ -22,7 +23,7 @@ export async function GET(req: Request) {
     // 1. Fetch relations
     const [ { data: workloads }, { data: rules } ] = await Promise.all([
       supabaseAdmin.from('workloads').select('id, name').eq('organization_id', orgId),
-      supabaseAdmin.from('attribution_rules').select('workload_id, match_value').eq('organization_id', orgId)
+      supabaseAdmin.from('attribution_rules').select('workload_id, provider, match_type, match_value').eq('organization_id', orgId)
     ]);
 
     const wlMap = new Map();
@@ -32,7 +33,9 @@ export async function GET(req: Request) {
     });
 
     const keyToWlMap = new Map();
-    (rules || []).forEach(r => keyToWlMap.set(r.match_value, r.workload_id));
+    (rules || []).forEach(r => {
+      if (r.match_type?.toLowerCase() === 'api_key') keyToWlMap.set(`${r.provider}:${r.match_value}`, r.workload_id);
+    });
 
     // 2. Fetch ALL usage events for the period to ensure 100% mathematical reconciliation with the Overview API
     // We filter provider and model at DB level to optimize, but workload filtering happens in JS due to attribution mapping.
@@ -56,7 +59,7 @@ export async function GET(req: Request) {
 
     // 3. Decorate and Filter by Workload in JS
     let enrichedEvents = (usageData || []).map(event => {
-      const wlId = keyToWlMap.get(event.api_key_id) || null;
+      const wlId = keyToWlMap.get(`${event.provider}:${event.api_key_id}`) || null;
       const wlName = wlId ? wlMap.get(wlId) : 'Unattributed';
       return {
         ...event,
@@ -72,15 +75,15 @@ export async function GET(req: Request) {
     // 4. Calculate Summary for the fully filtered dataset (reconciliation)
     let totalRequests = 0;
     let totalTokens = 0;
-    let totalCost = 0;
+    const costs = aggregateUsageCosts(enrichedEvents);
 
     const availableProviders = new Set<string>();
     const availableModels = new Set<string>();
 
     enrichedEvents.forEach(e => {
-      totalRequests += (e.request_count || 1);
-      totalTokens += (e.input_tokens || 0) + (e.output_tokens || 0) + (e.cache_read_tokens || 0) + (e.cache_creation_tokens || 0);
-      totalCost += parseFloat(e.calculated_cost || '0');
+      totalRequests += getRequestCount(e.request_count);
+      // Cache token columns are subsets of input_tokens, not additional tokens.
+      totalTokens += getTotalTokenCount(e);
       
       if (e.provider) availableProviders.add(e.provider);
       if (e.model) availableModels.add(e.model);
@@ -89,7 +92,11 @@ export async function GET(req: Request) {
     const summary = {
       totalRequests,
       totalTokens,
-      totalCost,
+      totalCost: costs.totalCost,
+      knownCost: costs.knownCost,
+      isCostComplete: costs.isComplete,
+      pricedEventCount: costs.pricedEventCount,
+      unpricedEventCount: costs.unpricedEventCount,
       totalEvents: enrichedEvents.length
     };
 

@@ -1,11 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
 
 export const viewport: Viewport = {
   themeColor: [
@@ -18,22 +12,19 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://stackaudit.ai"),
 
   title: {
-    default: "StackAudit — AI Spend Audits for Engineering Teams",
+    default: "StackAudit — AI Cost Intelligence",
     template: "%s | StackAudit",
   },
 
   description:
-    "Audit your AI tooling spend, identify unused subscriptions, compare plans, and uncover savings opportunities across ChatGPT, Claude, Cursor, Copilot, Gemini, and more.",
+    "Understand AI workload costs across providers and models, attribute spend to workloads, and track cost per business outcome.",
 
   keywords: [
-    "AI spend audit",
-    "ChatGPT enterprise pricing",
-    "Claude pricing",
-    "Cursor pricing",
-    "engineering budget optimization",
-    "AI SaaS cost management",
-    "developer tooling audit",
-    "startup infrastructure savings",
+    "AI cost intelligence",
+    "LLM cost tracking",
+    "AI workload attribution",
+    "cost per outcome",
+    "AI usage analytics",
   ],
 
   authors: [{ name: "StackAudit" }],
@@ -58,9 +49,9 @@ export const metadata: Metadata = {
   },
 
   openGraph: {
-    title: "StackAudit — Optimize Your AI Stack Spend",
+    title: "StackAudit — AI Cost Intelligence",
     description:
-      "Discover where your engineering team is overspending on AI subscriptions and infrastructure.",
+      "Track AI usage, provider costs, workloads, and business outcomes in a self-hostable dashboard.",
 
     url: "https://stackaudit.ai",
     siteName: "StackAudit",
@@ -72,16 +63,16 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "StackAudit AI Spend Audit Dashboard Preview",
+        alt: "StackAudit AI Cost Intelligence Dashboard",
       },
     ],
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "StackAudit — AI Spend Audits",
+    title: "StackAudit — AI Cost Intelligence",
     description:
-      "Find wasted AI spend across ChatGPT, Claude, Cursor, Copilot, Gemini, and more.",
+      "Track AI workload costs and business outcomes across providers.",
 
     creator: "@stackaudit",
     images: ["/og-image.png"],
@@ -102,7 +93,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} min-h-screen bg-background text-foreground antialiased font-sans`}>
+      <body className="min-h-screen bg-background text-foreground antialiased font-sans">
         {children}
       </body>
     </html>

@@ -20,7 +20,7 @@ function UsageContent() {
 
   // State
   const [events, setEvents] = useState<any[]>([]);
-  const [summary, setSummary] = useState({ totalRequests: 0, totalTokens: 0, totalCost: 0, totalEvents: 0 });
+  const [summary, setSummary] = useState<any>({ totalRequests: 0, totalTokens: 0, totalCost: null, knownCost: '0', isCostComplete: true, unpricedEventCount: 0, totalEvents: 0 });
   const [filterOptions, setFilterOptions] = useState({ providers: [], models: [], workloads: [] });
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
@@ -70,7 +70,7 @@ function UsageContent() {
         if (res.ok) {
           const data = await res.json();
           setEvents(data.events || []);
-          setSummary(data.summary || { totalRequests: 0, totalTokens: 0, totalCost: 0, totalEvents: 0 });
+          setSummary(data.summary || { totalRequests: 0, totalTokens: 0, totalCost: null, knownCost: '0', isCostComplete: true, unpricedEventCount: 0, totalEvents: 0 });
           setFilterOptions(data.filters || { providers: [], models: [], workloads: [] });
           setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
         }
@@ -161,8 +161,9 @@ function UsageContent() {
             <h3 className="text-sm font-medium">Total Cost</h3>
           </div>
           <div className="text-2xl font-semibold text-gray-900">
-            {loading ? '-' : formatCurrency(summary.totalCost)}
+            {loading ? '-' : summary.totalCost !== null ? formatCurrency(Number(summary.totalCost)) : summary.knownCost !== null ? `${formatCurrency(Number(summary.knownCost))} partial` : 'Unavailable'}
           </div>
+          {!loading && !summary.isCostComplete && <div className="text-xs text-amber-700 mt-1">{summary.unpricedEventCount} events have unknown pricing</div>}
         </div>
       </div>
 
@@ -192,7 +193,7 @@ function UsageContent() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
                 {events.map((e, idx) => {
-                  const isAnomaly = e.request_count > 1000 && parseFloat(e.calculated_cost) > 5.0; 
+                  const isAnomaly = !e.is_unpriced && e.request_count > 1000 && parseFloat(e.calculated_cost) > 5.0;
                   return (
                     <tr key={idx} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -219,7 +220,7 @@ function UsageContent() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <span className={`text-sm font-mono ${isAnomaly ? 'text-rose-600 font-medium bg-rose-50 px-2 py-1 rounded-md' : 'text-gray-900'}`}>
-                          {formatCurrency(parseFloat(e.calculated_cost || '0'))}
+                          {e.is_unpriced ? 'Unpriced' : formatCurrency(parseFloat(e.calculated_cost))}
                         </span>
                       </td>
                     </tr>

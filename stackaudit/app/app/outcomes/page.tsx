@@ -11,23 +11,9 @@ export default function OutcomesPage() {
         const start = new Date(Date.now() - 90 * 86400000).toISOString();
         const end = new Date().toISOString();
         
-        // Fetch all workloads first
-        const wlRes = await fetch('/api/v1/workloads');
-        if (!wlRes.ok) throw new Error('Failed to load workloads');
-        const { workloads } = await wlRes.json();
-
-        // Fetch CPO for each workload. The backend API handles the grouping by type correctly.
-        const cpoPromises = workloads.map(async (w: any) => {
-          const res = await fetch(`/api/v1/analytics/cost-per-outcome?workloadId=${w.id}&start=${start}&end=${end}`);
-          if (res.ok) {
-            const cpoData = await res.json();
-            return cpoData.results.map((r: any) => ({ ...r, workloadName: w.name }));
-          }
-          return [];
-        });
-
-        const results = await Promise.all(cpoPromises);
-        setData(results.flat());
+        const res = await fetch(`/api/v1/outcomes?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+        if (!res.ok) throw new Error('Failed to load outcomes');
+        setData((await res.json()).data || []);
       } catch (err) {
         console.error(err);
       } finally {
@@ -44,8 +30,7 @@ export default function OutcomesPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Business Outcomes</h1>
         <p className="text-muted-foreground mt-1">
-          Cost per outcome represents the total workload cost divided by the specific outcome type. 
-          It does not partition cost among different outcome types (unallocated).
+          Cost per outcome uses the selected workload’s known costs and the selected outcome type count. Costs are unallocated across outcome types.
         </p>
       </div>
 
@@ -78,7 +63,7 @@ export default function OutcomesPage() {
                     {row.totalOutcomeCount.toLocaleString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right font-medium">
-                    {row.costPerOutcome ? `$${parseFloat(row.costPerOutcome).toFixed(4)}` : '—'}
+                    {row.costPerOutcome !== null ? `$${parseFloat(row.costPerOutcome).toFixed(4)}` : row.availabilityReason || 'Unavailable'}
                   </td>
                 </tr>
               ))}

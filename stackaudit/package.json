@@ -7,10 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest",
+    "test": "vitest run --exclude **/integration.test.ts",
     "test:ui": "vitest --ui",
     "test:unit": "vitest run --exclude **/integration.test.ts",
     "test:integration": "vitest run **/integration.test.ts",
+    "typecheck": "tsc --noEmit",
     "seed": "node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/seed-demo-data.ts dotenv_config_path=.env.local"
   },
   "dependencies": {
@@ -21,7 +22,6 @@
     "big.js": "^7.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "framer-motion": "^12.38.0",
     "lucide-react": "^1.14.0",
     "next": "16.2.4",
     "react": "19.2.4",

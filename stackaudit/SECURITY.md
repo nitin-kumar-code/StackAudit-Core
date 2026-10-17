@@ -1,17 +1,16 @@
-# Security & Compliance
+# Security
 
-## Data Protection & Access Control
+StackAudit is an early preview and is not currently a hardened multi-tenant service. Many route and service queries include organization checks. Because the API uses a server-side Supabase client that can use the service-role key, every route must validate the caller and scope database access correctly.
 
-### ⚠️ Row Level Security (RLS) & DPDP Compliance
-For the V0 open-source release, **Row Level Security (RLS)** is intentionally deferred. Access is currently gated entirely by the server-side API layer using a service role key, as V0 acts as a local-first/single-tenant developer tool without a formalized Identity Provider (IdP) or Role-Based Access Control (RBAC).
+## Current limitations
 
-**Compliance Deadline (Hard Gate)**
-This deferral MUST be resolved prior to the **13 May 2027 DPDP (Digital Personal Data Protection) Rules compliance deadline** (India), which mandates strict access control and logging. 
+- Row Level Security policies and production-ready identity/role management are not complete.
+- In development only, API requests without an Authorization header can use `DEMO_ORG_ID` (or fall back to the first organization if that variable is unset). Do not expose this development server to untrusted networks.
+- Do not use production or sensitive personal data with this preview until authorization, database policies, logging, and operational controls have been reviewed for your deployment.
+- This project makes no compliance certification or legal-compliance claim. Applicable privacy obligations depend on deployment and data use; seek qualified advice for those decisions.
 
-**Pre-Production/Commercial Requirements:**
-Before transitioning this project to a multi-tenant commercial cloud environment or accepting real customer data, the following must be implemented:
-1. **Authentication**: Integration with a formal Identity Provider (e.g., Supabase Auth, Clerk, Auth0).
-2. **RLS Policies**: All tables must have `ENABLE ROW LEVEL SECURITY` with policies strictly scoped to the `organization_id` of the authenticated user.
-3. **Audit Logging**: One-year retention of access logs per DPDP requirements.
+## Reporting a vulnerability
 
-This is a tracked, critical blocker for the commercial phase.
+Do not publish exploitable details in a public issue. Use GitHub's private vulnerability reporting for this repository if it is enabled. Otherwise, contact the repository owner privately before public disclosure. No response-time guarantee is currently published.
+
+Never include API keys, service-role credentials, customer data, or unredacted logs in a report.
