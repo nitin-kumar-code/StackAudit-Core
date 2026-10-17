@@ -51,8 +51,8 @@ describe('Dashboard UI', () => {
     
     await waitFor(() => {
       expect(screen.getByText('$1234.56')).toBeInTheDocument();
-      expect(screen.getByText('$24.69')).toBeInTheDocument();
-      expect(screen.getByText('500.0k tokens')).toBeInTheDocument();
+      expect(screen.getByText('$24.690')).toBeInTheDocument();
+      expect(screen.getByText('500.0K tokens')).toBeInTheDocument();
       expect(screen.getByText('2')).toBeInTheDocument();
     });
   });

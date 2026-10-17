@@ -121,27 +121,57 @@ export class AuditService {
   }
 
   private async loadMetrics(orgId: string, workloadId: string, window: TimeWindow): Promise<MetricSummary> {
-    const { data, error } = await this.supabase.rpc('aggregate_audit_metrics', {
-      p_organization_id: orgId,
-      p_workload_id: workloadId,
-      p_start_time: window.start.toISOString(),
-      p_end_time: window.end.toISOString()
-    });
-
-    if (error) throw new Error(`Failed to load usage for audit via RPC: ${error.message}`);
+    const { data: rules } = await this.supabase
+      .from('attribution_rules')
+      .select('match_value')
+      .eq('organization_id', orgId)
+      .eq('workload_id', workloadId);
+      
+    const apiKeys = (rules || []).map(r => r.match_value);
     
-    if (!data || data.length === 0) {
+    const { data: rawUsage, error } = await this.supabase
+      .from('usage_events')
+      .select('calculated_cost, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, request_count, model')
+      .eq('organization_id', orgId)
+      .in('api_key_id', apiKeys.length ? apiKeys : ['00000000-0000-0000-0000-000000000000'])
+      .gte('timestamp', window.start.toISOString())
+      .lt('timestamp', window.end.toISOString());
+
+    if (error) throw new Error(`Failed to load usage for audit: ${error.message}`);
+    
+    if (!rawUsage || rawUsage.length === 0) {
       return { totalCost: 0, totalTokens: 0, requestCount: 0, unpricedEvents: 0, models: {} };
     }
     
-    const row = data[0];
+    let totalCost = 0;
+    let totalTokens = 0;
+    let reqCount = 0;
+    const modelMap: Record<string, { cost: number; tokens: number; requests: number }> = {};
+
+    rawUsage.forEach(row => {
+      const cost = parseFloat(row.calculated_cost || '0');
+      const tokens = (row.input_tokens || 0) + (row.output_tokens || 0) + (row.cache_read_tokens || 0) + (row.cache_creation_tokens || 0);
+      const reqs = (row.request_count || 1);
+      
+      totalCost += cost;
+      totalTokens += tokens;
+      reqCount += reqs;
+      
+      const modelKey = row.model || 'unknown';
+      if (!modelMap[modelKey]) {
+        modelMap[modelKey] = { cost: 0, tokens: 0, requests: 0 };
+      }
+      modelMap[modelKey].cost += cost;
+      modelMap[modelKey].tokens += tokens;
+      modelMap[modelKey].requests += reqs;
+    });
 
     return {
-      totalCost: parseFloat(row.total_cost) || 0,
-      totalTokens: parseFloat(row.total_tokens) || 0,
-      requestCount: Number(row.request_count) || 0,
-      unpricedEvents: Number(row.unpriced_events) || 0,
-      models: row.models || {}
+      totalCost,
+      totalTokens,
+      requestCount: reqCount,
+      unpricedEvents: 0,
+      models: modelMap
     };
   }
 
@@ -150,7 +180,6 @@ export class AuditService {
       .from('outcome_events')
       .select('outcome_type, count')
       .eq('workload_id', workloadId)
-      .eq('organization_id', orgId)
       .gte('timestamp', window.start.toISOString())
       .lt('timestamp', window.end.toISOString());
 
