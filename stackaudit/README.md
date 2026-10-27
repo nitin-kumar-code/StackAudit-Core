@@ -14,13 +14,24 @@ cp .env.example .env.local
 supabase start
 ```
 
-Set `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` to the local values printed by `supabase status`. Apply migrations with `supabase db reset`, then start the app:
+Set `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` to the local values printed by `supabase status`. Apply migrations with `supabase db reset`, then seed the demo data and start the app:
 
 ```sh
+npm run seed
 npm run dev
 ```
 
-The development-only API fallback uses `DEMO_ORG_ID`. The seed command creates the fixed demo organization and prints its ID; copy that ID into `.env.local` and restart the app. The seed command refuses remote Supabase URLs unless `DEMO_SEED_ALLOW_REMOTE=true` is set explicitly. Do not use the service-role key in client-side code.
+The seed command uses `DEMO_ORG_ID` from `.env.local` for the development-only API fallback. The demo organization is identified by a dedicated `demo_seed_key` marker added by the migrations. If the fixed ID already belongs to an unmarked organization, seeding stops before cleanup. Cleanup touches only records inside that marked demo organization. Keep the service-role key out of client-side code.
+
+### Reproducible demo data
+
+`DEMO_SEED`, `DEMO_DATASET_DAYS`, and `DEMO_DATASET_END` define the scenario. The end is an exclusive UTC timestamp, so the demo covers `[end - days, end)`. Reusing the same values recreates the same logical event IDs, references, timestamps, request/token counts, and outcomes. Pricing is read from the database `pricing_catalog`; the seeder refuses to write if it cannot price the generated scenario. No provider API is called.
+
+`npm run seed` and `npm run seed:demo` replace the dedicated demo dataset. `npm run seed:reset` is the same safe reset-and-seed operation. A failed write triggers cleanup of that marked demo dataset, so a partially seeded scenario is not left behind. The pricing catalog and all unmarked organizations are not changed.
+
+Remote databases are refused by default. Avoid production entirely. If a remote, disposable demo database is deliberately required, set `DEMO_SEED_ALLOW_REMOTE=true` and set `DEMO_SEED_EXPECTED_REMOTE_HOST` to the exact hostname in `NEXT_PUBLIC_SUPABASE_URL`; the dedicated demo ownership marker is still required. Never set these values in a production environment.
+
+For deterministic reproduction, keep the seed, day count, exclusive end timestamp, and pricing catalog unchanged. To have the existing monitoring engine evaluate the recent 14-day scenario, set the end timestamp to the current UTC midnight before running the seed.
 
 ## Commands
 
@@ -31,6 +42,7 @@ npm test                 # unit tests
 npm run test:integration # requires a running local Supabase stack and local service-role key
 npm run build
 npm run seed
+npm run seed:reset
 ```
 
 ## Architecture
@@ -43,7 +55,7 @@ npm run seed
 - `app/api/v1` exposes the HTTP boundary; `app/app` contains dashboard pages.
 - `supabase/migrations` is the database schema history.
 
-See subsystem READMEs under `core/` for contracts and behavior. The current deployment still has important limitations: dashboard aggregations are partly implemented in route handlers, the demo generator does not yet use the complete ingestion/pricing pipeline, and integration checks need local Supabase. See `AUDIT_REPORT.md` for the repository audit and known gaps.
+See subsystem READMEs under `core/` for contracts and behavior. Integration checks require local Supabase. See `AUDIT_REPORT.md` for the repository audit and known gaps.
 
 ## Data and privacy
 

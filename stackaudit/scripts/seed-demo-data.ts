@@ -1,343 +1,175 @@
-import { createClient } from '@supabase/supabase-js';
-import * as crypto from 'crypto';
-import * as fs from 'fs';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { MonitoringService } from '../core/monitoring/monitoring-service';
-import { calculateCost } from '../core/pricing/calculator';
-import { CanonicalUsageEvent, PricingRecord } from '../core/types';
+import { InMemoryPricingCatalog } from '../core/pricing';
+import { ingestUsageEvents } from '../core/usage/ingestion';
+import {
+  buildDemoDataset,
+  demoMonitoringConfigId,
+  DEMO_DATASET_DAYS,
+  DEMO_DATASET_END,
+  DEMO_ORGANIZATION_ID,
+  DEMO_SEED_KEY,
+  assertDemoOwnedRows,
+  pricingRecordFromRow,
+  resolveDemoTarget,
+  runCleanupSteps
+} from './demo-dataset';
 
-function mulberry32(a: number) {
-  return function() {
-    let t = a += 0x6D2B79F5;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const seedValue = Number(process.env.DEMO_SEED ?? '12345');
+const end = new Date(process.env.DEMO_DATASET_END ?? DEMO_DATASET_END);
+const days = Number(process.env.DEMO_DATASET_DAYS ?? DEMO_DATASET_DAYS);
+
+function requireConfiguration() {
+  if (!supabaseUrl) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required; refusing to seed an unidentified database.');
+  if (!supabaseKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required. Set it in .env.local before seeding.');
+  const target = resolveDemoTarget(
+    supabaseUrl,
+    process.env.DEMO_SEED_ALLOW_REMOTE === 'true',
+    process.env.DEMO_SEED_EXPECTED_REMOTE_HOST
+  );
+  if (target === 'remote') {
+    console.warn('Remote demo seeding explicitly enabled for the hostname-pinned target.');
   }
 }
 
-const rng = mulberry32(12345);
+async function assertDemoOrganization(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('id, demo_seed_key')
+    .eq('id', DEMO_ORGANIZATION_ID)
+    .maybeSingle();
+  if (error) throw new Error(`Cannot verify demo organization ownership (apply the demo ownership migration first): ${error.message}`);
 
-// PRNG helpers
-function randRange(min: number, max: number) {
-  return min + rng() * (max - min);
-}
-function randInt(min: number, max: number) {
-  return Math.floor(randRange(min, max));
-}
-
-// Fixed UUIDs for reproducibility
-function fakeUUID(seedNum: number) {
-  const hex = seedNum.toString(16).padStart(12, '0');
-  return `00000000-0000-4000-8000-${hex}`;
-}
-
-const PRICING: Record<string, Record<string, { input: string; output: string }>> = {
-  'openai': {
-    'gpt-4o-mini': { input: '0.15', output: '0.60' },
-    'gpt-4o': { input: '5.00', output: '15.00' }
-  },
-  'anthropic': {
-    'claude-3-haiku-20240307': { input: '0.25', output: '1.25' },
-    'claude-3-sonnet-20240229': { input: '3.00', output: '15.00' }
+  if (data) {
+    if (data.demo_seed_key !== DEMO_SEED_KEY) {
+      throw new Error(`Refusing cleanup: organization ${DEMO_ORGANIZATION_ID} is not marked as the StackAudit demo dataset.`);
+    }
+    return;
   }
-} as const;
 
-function getCost(provider: string, model: string, inputTokens: number, outputTokens: number) {
-  const rates = PRICING[provider]?.[model];
-  if (!rates) throw new Error(`No demo pricing configured for ${provider}/${model}`);
-  const pricing: PricingRecord = {
-    id: `demo-${provider}-${model}`,
-    provider,
-    model,
-    inputPrice: rates.input,
-    outputPrice: rates.output,
-    effectiveFrom: new Date('2000-01-01T00:00:00.000Z'),
-    source: 'Simulated demo pricing; not a provider quote'
-  };
-  const event: CanonicalUsageEvent = {
-    id: 'demo-calculation',
-    provider,
-    model,
-    timestamp: new Date(),
-    usage: { inputTokens, outputTokens },
-    attribution: {},
-    providerReference: 'demo-calculation',
-    rawResponseHash: 'demo-calculation'
-  };
-  return calculateCost(event, pricing).totalCost;
+  const { error: insertError } = await supabase.from('organizations').insert({
+    id: DEMO_ORGANIZATION_ID,
+    name: 'StackAudit Demonstration Dataset',
+    demo_seed_key: DEMO_SEED_KEY
+  });
+  if (insertError) throw new Error(`Could not create isolated demo organization: ${insertError.message}`);
 }
 
-function getSeasonalMultiplier(dayOffset: number, dayOfWeek: number) {
-  // Weekly seasonality (Sunday=0 ... Saturday=6)
-  const weekly = [0.8, 1.15, 1.1, 1.0, 1.05, 0.95, 0.8];
-  // 90 days ago = 1.0x, today = 1.4x (steady linear growth)
-  const growth = 1.0 + ((90 - dayOffset) / 90) * 0.4;
-  return weekly[dayOfWeek] * growth;
+async function cleanupOwnedDataset(supabase: SupabaseClient) {
+  const { data: organization, error: ownershipError } = await supabase
+    .from('organizations')
+    .select('demo_seed_key')
+    .eq('id', DEMO_ORGANIZATION_ID)
+    .maybeSingle();
+  if (ownershipError || organization?.demo_seed_key !== DEMO_SEED_KEY) {
+    throw new Error('Refusing demo cleanup because the organization ownership marker could not be verified.');
+  }
+
+  await runCleanupSteps([
+    () => supabase.from('usage_events').delete().eq('organization_id', DEMO_ORGANIZATION_ID),
+    () => supabase.from('outcome_events').delete().eq('organization_id', DEMO_ORGANIZATION_ID),
+    () => supabase.from('alerts').delete().eq('organization_id', DEMO_ORGANIZATION_ID),
+    () => supabase.from('audit_findings').delete().eq('organization_id', DEMO_ORGANIZATION_ID),
+    () => supabase.from('monitoring_runs').delete().eq('organization_id', DEMO_ORGANIZATION_ID),
+    () => supabase.from('monitoring_configs').delete().eq('organization_id', DEMO_ORGANIZATION_ID),
+    () => supabase.from('attribution_rules').delete().eq('organization_id', DEMO_ORGANIZATION_ID),
+    () => supabase.from('workloads').delete().eq('organization_id', DEMO_ORGANIZATION_ID)
+  ]);
+}
+
+async function upsertInBatches<T extends object>(
+  supabase: SupabaseClient,
+  table: string,
+  rows: T[],
+  conflict: string,
+  batchSize = 100
+) {
+  for (let index = 0; index < rows.length; index += batchSize) {
+    const { error } = await supabase.from(table).upsert(rows.slice(index, index + batchSize) as never[], { onConflict: conflict });
+    if (error) throw new Error(`Failed seeding ${table} batch ${Math.floor(index / batchSize) + 1}: ${error.message}`);
+  }
 }
 
 async function seed() {
-  const envContent = fs.readFileSync('.env.local', 'utf-8');
-  const env: Record<string, string> = {};
-  envContent.split('\n').forEach(line => {
-    const [k, ...v] = line.split('=');
-    if (k && v.length) env[k.trim()] = v.join('=').trim();
-  });
+  requireConfiguration();
+  const supabase = createClient(supabaseUrl!, supabaseKey!);
+  const { data: pricingRows, error: pricingError } = await supabase
+    .from('pricing_catalog')
+    .select('id, provider, model, input_price, output_price, cache_read_price, cache_creation_price, effective_from, effective_until, source')
+    .in('provider', ['openai', 'anthropic']);
+  if (pricingError) throw new Error(`Could not load the existing pricing catalog: ${pricingError.message}`);
+  const pricingRecords = (pricingRows || []).map(row => pricingRecordFromRow(row));
+  if (!pricingRecords.length) throw new Error('The pricing catalog has no OpenAI or Anthropic records; add catalog records before seeding.');
 
-  const supabaseUrl = env['NEXT_PUBLIC_SUPABASE_URL'] || 'http://localhost:54321';
-  const supabaseKey = env['SUPABASE_SERVICE_ROLE_KEY'];
-  if (!supabaseKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required. Set it in .env.local before seeding.');
-  }
-  const supabaseHostname = new URL(supabaseUrl).hostname;
-  const isLocalSupabase = ['127.0.0.1', 'localhost', '[::1]'].includes(supabaseHostname);
-  if (!isLocalSupabase && env['DEMO_SEED_ALLOW_REMOTE'] !== 'true') {
-    throw new Error('Refusing to seed a remote database. Set DEMO_SEED_ALLOW_REMOTE=true only when this is intentional.');
-  }
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const dataset = await buildDemoDataset({ seed: seedValue, end, days }, pricingRecords);
+  const pricingCatalog = new InMemoryPricingCatalog(pricingRecords);
 
-  console.log('Seeding Realistic Demo Data for Phase 10 Dashboard...');
-  console.log('Supabase URL:', supabaseUrl);
-
-  const orgId = fakeUUID(1);
-  const { error: orgErr } = await supabase.from('organizations').insert({ id: orgId, name: 'Demo Corp (Realistic)' });
-  if (orgErr && orgErr.code !== '23505') { console.error('❌ Organization:', orgErr); return; }
-  console.log('✅ Created Organization:', orgId);
-
-  // Workloads
-  const wSupport = fakeUUID(2);
-  const wDoc = fakeUUID(3);
-  const wSales = fakeUUID(4);
-  const workloads = [
-    { id: wSupport, organization_id: orgId, name: 'Support Triage', description: 'Automated ticket routing' },
-    { id: wDoc, organization_id: orgId, name: 'Document Summarization', description: 'Internal wiki summarization' },
-    { id: wSales, organization_id: orgId, name: 'Sales Research', description: 'Lead qualification insights' }
-  ];
-  await supabase.from('workloads').upsert(workloads, { onConflict: 'id' });
-  console.log('✅ Created 3 Workloads');
-
-  // Attribution Rules
-  const supportKey = fakeUUID(10);
-  const docKey = fakeUUID(11);
-  const salesKey = fakeUUID(12);
-  await supabase.from('attribution_rules').upsert([
-    { id: fakeUUID(20), organization_id: orgId, workload_id: wSupport, match_type: 'API_KEY', match_value: supportKey, provider: 'openai' },
-    { id: fakeUUID(21), organization_id: orgId, workload_id: wDoc, match_type: 'API_KEY', match_value: docKey, provider: 'anthropic' },
-    { id: fakeUUID(22), organization_id: orgId, workload_id: wSales, match_type: 'API_KEY', match_value: salesKey, provider: 'anthropic' }
-  ], { onConflict: 'id' });
-  
-  // Clean up old data for this org to prevent buildup
-  const demoWorkloadIds = [wSupport, wDoc, wSales];
-  const cleanupResults = await Promise.all([
-    supabase.from('usage_events').delete().eq('organization_id', orgId),
-    supabase.from('outcome_events').delete().in('workload_id', demoWorkloadIds),
-    supabase.from('alerts').delete().eq('organization_id', orgId),
-    supabase.from('audit_findings').delete().eq('organization_id', orgId),
-    supabase.from('monitoring_configs').delete().eq('organization_id', orgId)
+  await assertDemoOrganization(supabase);
+  const [{ data: existingWorkloads, error: workloadCheckError }, { data: existingRules, error: ruleCheckError }] = await Promise.all([
+    supabase.from('workloads').select('id, organization_id').in('id', dataset.workloads.map(workload => workload.id)),
+    supabase.from('attribution_rules').select('id, organization_id').in('id', dataset.attributionRules.map(rule => rule.id))
   ]);
-  const cleanupError = cleanupResults.find(result => result.error)?.error;
-  if (cleanupError) throw new Error(`Could not clear prior demo dataset: ${cleanupError.message}`);
+  if (workloadCheckError || ruleCheckError) throw new Error('Could not verify demo record ownership before cleanup.');
+  assertDemoOwnedRows(existingWorkloads || [], 'workload');
+  assertDemoOwnedRows(existingRules || [], 'attribution rule');
 
-  const usageEvents = [];
-  const outcomeEvents = [];
+  let writingStarted = false;
+  try {
+    // Every cleanup query is scoped to an organization with the explicit demo ownership marker.
+    // Supabase REST calls do not share a transaction; on a later write failure we clean this
+    // dedicated dataset back to empty and stop, rather than leave a partial demo behind.
+    await cleanupOwnedDataset(supabase);
+    writingStarted = true;
 
-  const now = new Date();
-  
-  // Start from Day 90 down to Day 1
-  for (let offset = 90; offset >= 0; offset--) {
-    const d = new Date(now.getTime() - offset * 86400000);
-    const dayOfWeek = d.getDay();
-    const seasonMult = getSeasonalMultiplier(offset, dayOfWeek);
+    const { error: workloadError } = await supabase.from('workloads').insert(dataset.workloads);
+    if (workloadError) throw new Error(`Could not create demo workloads: ${workloadError.message}`);
+    const { error: ruleError } = await supabase.from('attribution_rules').insert(dataset.attributionRules);
+    if (ruleError) throw new Error(`Could not create demo attribution rules: ${ruleError.message}`);
 
-    // ==========================================
-    // Workload A: Support Triage 
-    // Scenario: Normal traffic -> traffic spikes around day 15 ago, tokens/req surge, shifting model mix
-    // ==========================================
-    let supportReqs = Math.round(1200 * seasonMult);
-    let supportInputPerReq = 4500;
-    let supportOutputPerReq = 800;
-    let gpt4oRatio = 0.05; // 5% baseline
-
-    // Anomaly logic! Day offset goes down to 0 (today)
-    // The monitoring window evaluates the last 14 days vs the prior 14 days.
-    // The spike must be strong enough to trigger COST_DRIFT (>30%).
-    if (offset <= 14 && offset >= 2) {
-       // Traffic spike!
-       supportReqs = Math.round(1800 * seasonMult);
-       // Token surge
-       supportInputPerReq = 8500;
-       // Model shift
-       gpt4oRatio = 0.50; // 50% fall back to gpt-4o because prompts got complex
-    } else if (offset < 2) {
-       // Start returning to normal
-       supportReqs = Math.round(1300 * seasonMult);
-       supportInputPerReq = 5000;
-       gpt4oRatio = 0.15;
+    const chunkSize = 100;
+    for (let index = 0; index < dataset.usageEvents.length; index += chunkSize) {
+      const result = await ingestUsageEvents(dataset.usageEvents.slice(index, index + chunkSize), DEMO_ORGANIZATION_ID, pricingCatalog, supabase);
+      if (result.errors.length || result.pricingFailed > 0 || result.successful !== Math.min(chunkSize, dataset.usageEvents.length - index)) {
+        const reason = result.errors.map(error => error.message).join('; ') || `${result.pricingFailed} generated events have no applicable price`;
+        throw new Error(`Usage ingestion did not fully price and persist the demo batch: ${reason}`);
+      }
     }
+    await upsertInBatches(supabase, 'outcome_events', dataset.outcomeEvents, 'organization_id,idempotency_key');
 
-    // Add noise
-    supportReqs += randInt(-50, 50);
-    supportInputPerReq += randInt(-200, 200);
-    supportOutputPerReq += randInt(-50, 50);
+    const monitoringConfigs = dataset.workloads.map(workload => ({
+      id: demoMonitoringConfigId(workload.id),
+      organization_id: DEMO_ORGANIZATION_ID,
+      workload_id: workload.id,
+      enabled: true,
+      config: { evaluationWindowDays: 14, notificationChannels: [], alertPolicy: { minSeverityToNotify: 'LOW' } }
+    }));
+    const { error: configError } = await supabase.from('monitoring_configs').upsert(monitoringConfigs, { onConflict: 'organization_id,workload_id' });
+    if (configError) throw new Error(`Could not create monitoring configurations: ${configError.message}`);
 
-    const supportReqs4o = Math.round(supportReqs * gpt4oRatio);
-    const supportReqsMini = supportReqs - supportReqs4o;
-
-    // Create a batch row for Mini
-    const miniCost = getCost('openai', 'gpt-4o-mini', supportReqsMini * supportInputPerReq, supportReqsMini * supportOutputPerReq);
-    usageEvents.push({
-      id: crypto.randomUUID(),
-      organization_id: orgId,
-      api_key_id: supportKey,
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      timestamp: d.toISOString(),
-      input_tokens: supportReqsMini * supportInputPerReq,
-      output_tokens: supportReqsMini * supportOutputPerReq,
-      cache_read_tokens: 0,
-      cache_creation_tokens: 0,
-      calculated_cost: miniCost,
-      request_count: supportReqsMini,
-      provider_reference: crypto.randomUUID(),
-      raw_response_hash: crypto.randomUUID(),
-    });
-
-    // Create a batch row for 4o
-    if (supportReqs4o > 0) {
-      const o4Cost = getCost('openai', 'gpt-4o', supportReqs4o * supportInputPerReq, supportReqs4o * supportOutputPerReq);
-      usageEvents.push({
-        id: crypto.randomUUID(),
-        organization_id: orgId,
-        api_key_id: supportKey,
-        provider: 'openai',
-        model: 'gpt-4o',
-        timestamp: d.toISOString(),
-        input_tokens: supportReqs4o * supportInputPerReq,
-        output_tokens: supportReqs4o * supportOutputPerReq,
-        cache_read_tokens: 0,
-        cache_creation_tokens: 0,
-        calculated_cost: o4Cost,
-        request_count: supportReqs4o,
-        provider_reference: crypto.randomUUID(),
-        raw_response_hash: crypto.randomUUID()
-      });
+    console.log(`Seeded ${dataset.usageEvents.length} priced usage events and ${dataset.outcomeEvents.length} outcomes.`);
+    console.log(`Dataset window: [${dataset.start.toISOString()}, ${dataset.end.toISOString()}); seed ${seedValue}.`);
+    console.log(`Demo organization: ${DEMO_ORGANIZATION_ID}. Set DEMO_ORG_ID to this value in .env.local for the local development fallback.`);
+    console.log('Running the existing audit and monitoring pipeline...');
+    const runId = await new MonitoringService(supabase).runMonitoring(DEMO_ORGANIZATION_ID);
+    const { data: run, error: runError } = await supabase.from('monitoring_runs').select('status, findings_count, alerts_count').eq('id', runId).single();
+    if (runError) throw new Error(`Could not read the monitoring run result: ${runError.message}`);
+    if (!run || !['COMPLETED', 'COMPLETED_WITH_ERRORS'].includes(run.status)) throw new Error(`Monitoring run did not complete successfully (${run?.status || 'missing result'}).`);
+    console.log(`Monitoring completed: ${run.findings_count} findings, ${run.alerts_count} alerts (derived by the application engines).`);
+  } catch (error) {
+    if (writingStarted) {
+      try {
+        await cleanupOwnedDataset(supabase);
+      } catch (cleanupError) {
+        throw new Error(`${error instanceof Error ? error.message : String(error)}; rollback cleanup also failed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+      }
     }
-
-    // Outcomes: Probability of ticket resolved falls during spike (complex issues)
-    const resolveRate = offset <= 14 && offset >= 2 ? 0.65 : 0.85;
-    const resolvedCount = Math.round(supportReqs * resolveRate) + randInt(-20, 20);
-    outcomeEvents.push({
-      id: crypto.randomUUID(),
-      workload_id: wSupport,
-      outcome_type: 'ticket_resolved',
-      timestamp: d.toISOString(),
-      count: resolvedCount
-    });
-
-    // ==========================================
-    // Workload B: Document Summarization (Healthy)
-    // ==========================================
-    const docReqs = Math.round(200 * seasonMult) + randInt(-15, 15);
-    const docInputPerReq = 5000 + randInt(-1000, 1000);
-    const docOutputPerReq = 800 + randInt(-200, 200);
-
-    const docCost = getCost('anthropic', 'claude-3-haiku-20240307', docReqs * docInputPerReq, docReqs * docOutputPerReq);
-    usageEvents.push({
-      id: crypto.randomUUID(),
-      organization_id: orgId,
-      api_key_id: docKey,
-      provider: 'anthropic',
-      model: 'claude-3-haiku-20240307',
-      timestamp: d.toISOString(),
-      input_tokens: docReqs * docInputPerReq,
-      output_tokens: docReqs * docOutputPerReq,
-      cache_read_tokens: 0,
-      cache_creation_tokens: 0,
-      calculated_cost: docCost,
-      request_count: docReqs,
-      provider_reference: crypto.randomUUID(),
-      raw_response_hash: crypto.randomUUID(),
-    });
-    outcomeEvents.push({
-      id: crypto.randomUUID(),
-      workload_id: wDoc,
-      outcome_type: 'document_processed',
-      timestamp: d.toISOString(),
-      count: docReqs // 100% success rate
-    });
-
-    // ==========================================
-    // Workload C: Sales Research (Variable, Spiky)
-    // ==========================================
-    const salesMult = randRange(0.6, 1.5);
-    const salesReqs = Math.round(150 * seasonMult * salesMult);
-    const salesInputPerReq = 12000 + randInt(-3000, 3000);
-    const salesOutputPerReq = 1500 + randInt(-500, 500);
-
-    const salesCost = getCost('anthropic', 'claude-3-sonnet-20240229', salesReqs * salesInputPerReq, salesReqs * salesOutputPerReq);
-    usageEvents.push({
-      id: crypto.randomUUID(),
-      organization_id: orgId,
-      api_key_id: salesKey,
-      provider: 'anthropic',
-      model: 'claude-3-sonnet-20240229',
-      timestamp: d.toISOString(),
-      input_tokens: salesReqs * salesInputPerReq,
-      output_tokens: salesReqs * salesOutputPerReq,
-      cache_read_tokens: 0,
-      cache_creation_tokens: 0,
-      calculated_cost: salesCost,
-      request_count: salesReqs,
-      provider_reference: crypto.randomUUID(),
-      raw_response_hash: crypto.randomUUID(),
-    });
-    
-    // Outcomes: Variable completion
-    const researchCount = Math.round(salesReqs * randRange(0.5, 0.8));
-    outcomeEvents.push({
-      id: crypto.randomUUID(),
-      workload_id: wSales,
-      outcome_type: 'research_completed',
-      timestamp: d.toISOString(),
-      count: researchCount
-    });
+    throw error;
   }
-
-  // Insert batches
-  console.log(`Inserting ${usageEvents.length} Usage Events...`);
-  const chunkSize = 100;
-  for(let i=0; i<usageEvents.length; i+=chunkSize) {
-     const { error } = await supabase.from('usage_events').insert(usageEvents.slice(i, i+chunkSize));
-     if (error) console.error('Error inserting usage_events:', error);
-  }
-  
-  console.log(`Inserting ${outcomeEvents.length} Outcome Events...`);
-  for(let i=0; i<outcomeEvents.length; i+=chunkSize) {
-     const { error } = await supabase.from('outcome_events').insert(outcomeEvents.slice(i, i+chunkSize));
-     if (error) console.error('Error inserting outcome_events:', error);
-  }
-
-  // Monitoring Configs for all workloads
-  const monitoringConfigs = workloads.map(w => ({
-    id: crypto.randomUUID(),
-    organization_id: orgId,
-    workload_id: w.id,
-    enabled: true,
-    config: {
-      evaluationWindowDays: 14,
-      notificationChannels: [],
-      alertPolicy: { minSeverityToNotify: 'LOW' }
-    }
-  }));
-  await supabase.from('monitoring_configs').insert(monitoringConfigs);
-
-  console.log('Running Audit/Monitoring Engine...');
-  const monitoringService = new MonitoringService(supabase);
-  const runId = await monitoringService.runMonitoring(orgId);
-  
-  const { data: mrun } = await supabase.from('monitoring_runs').select('*').eq('id', runId).single();
-  console.log('✅ Monitoring Run Complete:', mrun);
-
-  console.log(`\n🎉 Dataset complete. Demo organization ID: ${orgId}`);
-  console.log('Set DEMO_ORG_ID to this value in .env.local to use the local development fallback.');
 }
 
-seed().catch(console.error);
+seed().catch(error => {
+  console.error(`Demo seed failed: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+});

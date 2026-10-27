@@ -12,7 +12,9 @@
     "test:unit": "vitest run --exclude **/integration.test.ts",
     "test:integration": "vitest run **/integration.test.ts",
     "typecheck": "tsc --noEmit",
-    "seed": "node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/seed-demo-data.ts dotenv_config_path=.env.local"
+    "seed": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/seed-demo-data.ts",
+    "seed:demo": "npm run seed",
+    "seed:reset": "npm run seed"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
