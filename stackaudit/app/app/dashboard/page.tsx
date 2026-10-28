@@ -3,6 +3,17 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
+interface DashboardAlert { id: string; category: string; workloadName?: string; finding?: { title?: string; evidence?: { change?: number; drift?: number } } }
+interface WorkloadSummary { id: string; name: string; cost: string | null; knownCost: string | null; usage: number; outcomes: number; costPerOutcome: number | null; changePct: number }
+interface CostChangeEvidence { workloadName: string; title: string; evidence?: { change?: number; drift?: number; baseline_cost?: number; baseline?: number } }
+interface DashboardSummary {
+  totalCost: string | null; knownCost: string | null; isCostComplete?: boolean; unpricedEventCount?: number;
+  unattributedEventCount?: number; unattributedKnownCost?: string | null; totalTokens?: number; totalRequests?: number;
+  activeAlerts: number; outcomes?: { primaryCpo?: { costPerOutcome: string | null; availabilityReason?: string | null; outcomeType?: string } };
+  recentAlerts?: DashboardAlert[]; workloadSummaries?: WorkloadSummary[]; costChangeEvidence?: CostChangeEvidence[];
+}
+interface TrendPoint { date: string; cost: string | null; tokens: number; outcomes: number }
+
 function formatNumber(num: number) {
   if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
   if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
@@ -11,8 +22,8 @@ function formatNumber(num: number) {
 
 export default function DashboardPage() {
   const [days, setDays] = useState(90);
-  const [summary, setSummary] = useState<any>(null);
-  const [trends, setTrends] = useState<any[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [trends, setTrends] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -33,8 +44,8 @@ export default function DashboardPage() {
 
         setSummary(await sumRes.json());
         setTrends(await trendRes.json());
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Unable to load dashboard data');
       } finally {
         setLoading(false);
       }
@@ -43,6 +54,7 @@ export default function DashboardPage() {
   }, [days]);
 
   if (error) return <div className="p-8 text-red-600">Error: {error}</div>;
+  if (!summary) return <div className="p-8 text-muted-foreground">Loading dashboard...</div>;
 
   return (
     <div className="space-y-8 max-w-6xl pb-12">
@@ -71,7 +83,7 @@ export default function DashboardPage() {
               value={summary.totalCost != null ? `$${Number(summary.totalCost).toFixed(2)}` : summary.knownCost != null ? `$${Number(summary.knownCost).toFixed(2)} partial` : 'Unavailable'}
               subtitle={[
                 summary.isCostComplete === false ? `${summary.unpricedEventCount} events have unknown pricing` : null,
-                summary.unattributedEventCount > 0 ? `${summary.unattributedEventCount} unassigned events (${summary.unattributedKnownCost != null ? `$${Number(summary.unattributedKnownCost).toFixed(2)} known cost` : 'cost unavailable'})` : null
+                (summary.unattributedEventCount ?? 0) > 0 ? `${summary.unattributedEventCount} unassigned events (${summary.unattributedKnownCost != null ? `$${Number(summary.unattributedKnownCost).toFixed(2)} known cost` : 'cost unavailable'})` : null
               ].filter(Boolean).join(' · ') || undefined}
             />
             
@@ -105,7 +117,7 @@ export default function DashboardPage() {
               <h2 className="font-medium text-foreground mb-4">Recent Alerts</h2>
               {summary.recentAlerts && summary.recentAlerts.length > 0 ? (
                 <div className="space-y-3 overflow-y-auto pr-2">
-                  {summary.recentAlerts.map((alert: any) => (
+                  {summary.recentAlerts.map((alert) => (
                     <div key={alert.id} className="p-4 bg-red-50/30 border border-red-100/50 rounded-xl text-sm flex flex-col relative group">
                       <div className="flex items-start justify-between mb-2">
                         <span className="font-medium text-red-900 flex items-center">
@@ -156,7 +168,7 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {summary.workloadSummaries.map((w: any) => (
+                    {summary.workloadSummaries.map((w) => (
                       <tr key={w.id} className="hover:bg-secondary/30 transition-colors group cursor-pointer">
                         <td className="px-6 py-4 font-medium text-foreground relative">
                           <Link href={`/app/workloads/${w.id}`} className="absolute inset-0 z-10"></Link>
@@ -196,7 +208,7 @@ export default function DashboardPage() {
             <div className="space-y-4 pt-4">
               <h2 className="text-lg font-medium text-foreground">Why costs changed</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {summary.costChangeEvidence.map((ev: any, i: number) => (
+                {summary.costChangeEvidence.map((ev, i) => (
                   <div key={i} className="border border-border rounded-xl bg-card p-5 shadow-sm text-sm relative group">
                     <Link href={`/app/audits`} className="absolute inset-0 z-10"></Link>
                     <div className="font-medium text-foreground mb-4 border-b border-border pb-3 flex justify-between items-center">
@@ -235,7 +247,7 @@ export default function DashboardPage() {
   );
 }
 
-function TrendChart({ trends }: { trends: any[] }) {
+function TrendChart({ trends }: { trends: TrendPoint[] }) {
   const [metric, setMetric] = useState<'cost' | 'tokens' | 'outcomes'>('cost');
 
   if (!trends || !trends.length) return <div className="h-64 flex items-center justify-center text-muted-foreground">No trend data available.</div>;
@@ -286,7 +298,7 @@ function TrendChart({ trends }: { trends: any[] }) {
               width={60}
             />
             <Tooltip 
-              formatter={(value: any) => [config[metric].formatter(Number(value)), config[metric].label]}
+              formatter={(value) => [config[metric].formatter(Number(value)), config[metric].label]}
               labelFormatter={(label) => new Date(label).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
               contentStyle={{ borderRadius: '8px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-card)', fontSize: '13px', padding: '10px 14px' }}
               itemStyle={{ color: 'var(--color-foreground)', fontWeight: 500, padding: 0, marginTop: 4 }}

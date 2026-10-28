@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       }
     }, { status: 200 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (error instanceof ForbiddenError) return NextResponse.json({ error: error.message }, { status: 403 });
     if (error instanceof ValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -66,7 +66,7 @@ export async function GET(req: Request) {
     if (error) throw new Error(error.message);
     
     return NextResponse.json({ findings }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     console.error('Audit GET Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

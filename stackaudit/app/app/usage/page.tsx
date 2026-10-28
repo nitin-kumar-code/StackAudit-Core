@@ -2,7 +2,11 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Database, Filter, ChevronLeft, ChevronRight, Activity, Zap, DollarSign } from 'lucide-react';
+import { Database, ChevronLeft, ChevronRight, Activity, Zap, DollarSign } from 'lucide-react';
+
+interface UsageEventRow { id: string; timestamp: string; provider: string; model: string; input_tokens: number | null; output_tokens: number | null; request_count: number | null; calculated_cost: string | null; workload_name?: string | null; is_unpriced?: boolean }
+interface WorkloadOption { id: string; name: string }
+interface UsageSummary { totalRequests: number; totalTokens: number; totalCost: string | null; knownCost: string | null; isCostComplete: boolean; unpricedEventCount: number; totalEvents: number }
 
 function formatNumber(num: number) {
   if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
@@ -19,9 +23,9 @@ function UsageContent() {
   const searchParams = useSearchParams();
 
   // State
-  const [events, setEvents] = useState<any[]>([]);
-  const [summary, setSummary] = useState<any>({ totalRequests: 0, totalTokens: 0, totalCost: null, knownCost: '0', isCostComplete: true, unpricedEventCount: 0, totalEvents: 0 });
-  const [filterOptions, setFilterOptions] = useState({ providers: [], models: [], workloads: [] });
+  const [events, setEvents] = useState<UsageEventRow[]>([]);
+  const [summary, setSummary] = useState<UsageSummary>({ totalRequests: 0, totalTokens: 0, totalCost: null, knownCost: '0', isCostComplete: true, unpricedEventCount: 0, totalEvents: 0 });
+  const [filterOptions, setFilterOptions] = useState<{ providers: string[]; models: string[]; workloads: WorkloadOption[] }>({ providers: [], models: [], workloads: [] });
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -108,7 +112,7 @@ function UsageContent() {
             className="h-9 px-3 py-1 rounded-md border border-gray-200 bg-white text-sm font-medium text-gray-700 shadow-sm focus:border-gray-300 focus:ring-0 outline-none cursor-pointer max-w-[200px] truncate"
           >
             <option value="all">All Workloads</option>
-            {filterOptions.workloads.map((w: any) => (
+            {filterOptions.workloads.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
           </select>
@@ -193,7 +197,7 @@ function UsageContent() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
                 {events.map((e, idx) => {
-                  const isAnomaly = !e.is_unpriced && e.request_count > 1000 && parseFloat(e.calculated_cost) > 5.0;
+                  const isAnomaly = !e.is_unpriced && (e.request_count ?? 1) > 1000 && parseFloat(e.calculated_cost ?? '0') > 5.0;
                   return (
                     <tr key={idx} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -220,7 +224,7 @@ function UsageContent() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <span className={`text-sm font-mono ${isAnomaly ? 'text-rose-600 font-medium bg-rose-50 px-2 py-1 rounded-md' : 'text-gray-900'}`}>
-                          {e.is_unpriced ? 'Unpriced' : formatCurrency(parseFloat(e.calculated_cost))}
+                          {e.is_unpriced ? 'Unpriced' : formatCurrency(parseFloat(e.calculated_cost ?? '0'))}
                         </span>
                       </td>
                     </tr>

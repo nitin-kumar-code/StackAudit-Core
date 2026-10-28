@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../lib/supabase/client';
 import { getAuthOrgId, UnauthorizedError, ForbiddenError } from '../../../../../lib/auth';
 import { aggregateUsageCosts, calculateCostPerOutcome, getRequestCount, getTotalTokenCount } from '../../../../../core/usage/metrics';
+import { UsageCostRow } from '../../../../../core/usage/metrics';
+
+interface DashboardUsageRow extends UsageCostRow {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_creation_tokens: number | null;
+  request_count: number | null;
+  api_key_id: string | null;
+  provider: string;
+}
 
 export async function GET(req: Request) {
   try {
@@ -53,13 +64,13 @@ export async function GET(req: Request) {
     }, {});
 
     // Aggregations
-    const costRows: any[] = [];
-    const attributedCostRows: any[] = [];
-    const unattributedCostRows: any[] = [];
+    const costRows: DashboardUsageRow[] = [];
+    const attributedCostRows: DashboardUsageRow[] = [];
+    const unattributedCostRows: DashboardUsageRow[] = [];
     let totalTokensNum = 0;
     let requestCountNum = 0;
     
-    const workloadAgg: Record<string, { costs: any[]; usage: number; outcomes: number; outcomeTypes: Record<string, number>; name: string }> = {};
+    const workloadAgg: Record<string, { costs: DashboardUsageRow[]; usage: number; outcomes: number; outcomeTypes: Record<string, number>; name: string }> = {};
     (workloads || []).forEach(w => {
       workloadAgg[w.id] = { costs: [], usage: 0, outcomes: 0, outcomeTypes: {}, name: w.name };
     });
@@ -169,10 +180,10 @@ export async function GET(req: Request) {
       }
     }, { status: 200 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (error instanceof ForbiddenError) return NextResponse.json({ error: error.message }, { status: 403 });
     console.error('Dashboard Summary Error:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal Server Error' }, { status: 500 });
   }
 }

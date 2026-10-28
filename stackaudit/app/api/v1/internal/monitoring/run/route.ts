@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       .in('id', runIds);
 
     return NextResponse.json({ runs: runs || [], count: runIds.length }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Internal Monitoring Run Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

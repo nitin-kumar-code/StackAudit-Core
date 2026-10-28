@@ -103,7 +103,7 @@ export class WorkloadService {
       throw new ValidationError('Workload name cannot be empty');
     }
 
-    const updateData: any = {};
+    const updateData: { name?: string; description?: string | null } = {};
     if (dto.name !== undefined) updateData.name = dto.name.trim();
     if (dto.description !== undefined) updateData.description = dto.description?.trim() || null;
 

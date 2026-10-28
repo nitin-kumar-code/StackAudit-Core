@@ -33,12 +33,12 @@ jobs:
     - name: Setup Supabase CLI
       uses: supabase/setup-cli@v1
       with:
-        version: latest
+        version: 2.122.0
 
     - name: Start Supabase Local Stack
       run: supabase start
 
-    - name: Export local Supabase credentials
+    - name: Export disposable local Supabase credentials
       run: |
         SERVICE_ROLE_KEY="$(supabase status -o env | sed -n 's/^SERVICE_ROLE_KEY=//p' | tr -d '"')"
         if [ -z "$SERVICE_ROLE_KEY" ]; then
@@ -48,10 +48,8 @@ jobs:
         echo "NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321" >> "$GITHUB_ENV"
         echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
       
-    - name: Generate Types and Apply Migrations
-      run: |
-        supabase db reset
-        supabase gen types typescript --local > database.types.ts
+    - name: Reset local database and validate migrations
+      run: supabase db reset
 
     - name: Production build
       run: npm run build

@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { AuditContext, TimeWindow, MetricSummary } from './types';
 import { AuditFinding, AuditCategory } from '../types';
-import { AuditEngine, AuditEngineResult } from './engine';
+import { AuditEngine } from './engine';
 import { ALL_RULES } from './rules';
 import { WorkloadNotFoundError, ValidationError } from '../workloads/service';
 import { getRequestCount, getTotalTokenCount } from '../usage/metrics';
@@ -263,7 +263,7 @@ export class AuditService {
        new Date(f.time_window_start).getTime() === orig.timeWindowStart.getTime())
     );
 
-    return relevant.map((row: any) => ({
+    return relevant.map((row) => ({
       id: row.id,
       organizationId: row.organization_id,
       workloadId: row.workload_id,

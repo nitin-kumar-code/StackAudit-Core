@@ -105,11 +105,11 @@ export class WebhookChannel implements NotificationChannel {
       if (!response.ok) {
         throw new Error(`Webhook returned HTTP ${response.status}: ${response.statusText}`);
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(`Webhook delivery timed out after ${WEBHOOK_TIMEOUT_MS}ms`);
       }
-      throw new Error(`Webhook delivery failed: ${error.message}`);
+      throw new Error(`Webhook delivery failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       clearTimeout(timeoutId);
     }

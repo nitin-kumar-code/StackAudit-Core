@@ -14,7 +14,7 @@ export async function DELETE(
     const orgId = await getAuthOrgId(req);
     await workloadService.deleteAttributionRule(orgId, id, ruleId);
     return new NextResponse(null, { status: 204 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }

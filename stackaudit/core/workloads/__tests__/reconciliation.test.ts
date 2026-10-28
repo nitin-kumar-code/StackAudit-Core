@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 
-function calculateSpendBreakdown(attributedUsageRows: any[]) {
+interface AttributedUsageRow { calculated_cost: string; workload_id: string | null }
+
+function calculateSpendBreakdown(attributedUsageRows: AttributedUsageRow[]) {
   let totalSpend = 0;
   let attributedSpend = 0;
   let unattributedSpend = 0;

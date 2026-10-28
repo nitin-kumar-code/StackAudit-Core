@@ -10,7 +10,7 @@
     "test": "vitest run --exclude **/integration.test.ts",
     "test:ui": "vitest --ui",
     "test:unit": "vitest run --exclude **/integration.test.ts",
-    "test:integration": "vitest run **/integration.test.ts",
+    "test:integration": "vitest run app/api/v1/usage/integration.test.ts core/audit/__tests__/integration.test.ts core/monitoring/__tests__/integration.test.ts core/outcomes/__tests__/integration.test.ts core/workloads/__tests__/integration.test.ts",
     "typecheck": "tsc --noEmit",
     "seed": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/seed-demo-data.ts",
     "seed:demo": "npm run seed",

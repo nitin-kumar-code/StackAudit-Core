@@ -14,7 +14,7 @@ export async function GET(
     const orgId = await getAuthOrgId(req);
     const workload = await workloadService.getWorkload(orgId, id);
     return NextResponse.json({ workload });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
@@ -57,7 +57,7 @@ export async function PATCH(
       description: body.description
     });
     return NextResponse.json({ data: workload });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
@@ -84,7 +84,7 @@ export async function DELETE(
     const orgId = await getAuthOrgId(req);
     await workloadService.deleteWorkload(orgId, id);
     return new NextResponse(null, { status: 204 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }

@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     return NextResponse.json({ alert: data }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (error instanceof ForbiddenError) return NextResponse.json({ error: error.message }, { status: 403 });
     console.error('Alert Resolve Error:', error);

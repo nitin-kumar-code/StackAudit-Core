@@ -1,4 +1,4 @@
-import { AuditFinding, AuditCategory, Severity, Confidence, AuditEvidence } from '../types';
+import { AuditFinding, AuditCategory } from '../types';
 
 export interface TimeWindow {
   start: Date;

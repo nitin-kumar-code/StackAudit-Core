@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../lib/supabase/client';
 import { getAuthOrgId, UnauthorizedError, ForbiddenError } from '../../../../../lib/auth';
 import { aggregateUsageCosts, getTotalTokenCount } from '../../../../../core/usage/metrics';
+import { UsageCostRow } from '../../../../../core/usage/metrics';
+
+interface TrendUsageRow extends UsageCostRow {
+  timestamp: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_creation_tokens: number | null;
+}
 
 export async function GET(req: Request) {
   try {
@@ -42,16 +51,16 @@ export async function GET(req: Request) {
 
     if (outcomesError) throw new Error(`Failed to load outcomes: ${outcomesError.message}`);
 
-    const byDay: Record<string, { costs: any[]; tokens: number; outcomes: number }> = {};
+    const byDay: Record<string, { costs: TrendUsageRow[]; tokens: number; outcomes: number }> = {};
 
-    (rawUsage || []).forEach((row: any) => {
+    (rawUsage || []).forEach((row) => {
       const day = new Date(row.timestamp).toISOString().split('T')[0];
       if (!byDay[day]) byDay[day] = { costs: [], tokens: 0, outcomes: 0 };
       byDay[day].costs.push(row);
       byDay[day].tokens += getTotalTokenCount(row);
     });
 
-    (outcomesData || []).forEach((row: any) => {
+    (outcomesData || []).forEach((row) => {
       const day = new Date(row.timestamp).toISOString().split('T')[0];
       if (!byDay[day]) byDay[day] = { costs: [], tokens: 0, outcomes: 0 };
       byDay[day].outcomes += row.count;
@@ -69,7 +78,7 @@ export async function GET(req: Request) {
     }));
 
     return NextResponse.json(merged, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (error instanceof ForbiddenError) return NextResponse.json({ error: error.message }, { status: 403 });
     console.error('Dashboard Trends Error:', error);

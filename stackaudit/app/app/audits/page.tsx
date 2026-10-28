@@ -2,8 +2,10 @@
 import { useEffect, useState } from 'react';
 import { ShieldAlert, Search } from 'lucide-react';
 
+interface FindingRow { severity: string; category: string; workloadId?: string | null; confidence: string; evidence: unknown }
+
 export default function AuditsPage() {
-  const [findings, setFindings] = useState<any[]>([]);
+  const [findings, setFindings] = useState<FindingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
 
@@ -22,7 +24,22 @@ export default function AuditsPage() {
   }
 
   useEffect(() => {
-    loadFindings();
+    let active = true;
+    async function loadInitialFindings() {
+      try {
+        const res = await fetch('/api/v1/audits');
+        if (res.ok) {
+          const data = await res.json();
+          if (active) setFindings(data.findings || []);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadInitialFindings();
+    return () => { active = false; };
   }, []);
 
   async function handleRunAudit() {

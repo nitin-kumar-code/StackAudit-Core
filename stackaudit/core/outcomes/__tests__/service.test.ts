@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OutcomeService } from '../service';
-import { ValidationError, WorkloadNotFoundError } from '../../workloads/service';
+import { ValidationError } from '../../workloads/service';
 import { ConflictError } from '../../types';
 import { SupabaseClient } from '@supabase/supabase-js';
 

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { UsageSpikeRule } from '../usage-spike';
 import { CostDriftRule } from '../cost-drift';
 import { TokenEfficiencyRule } from '../token-efficiency';
-import { ModelMixRule } from '../model-mix';
 import { AuditContext } from '../../types';
 
 describe('Audit Rules', () => {

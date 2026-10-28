@@ -1,16 +1,24 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { OutcomeEvent, CostPerOutcomeResult, CostPerOutcomeDataPoint, ConflictError } from '../types';
+import { OutcomeEvent, CostPerOutcomeResult, CostPerOutcomeDataPoint, ConflictError, JsonObject } from '../types';
 import { WorkloadNotFoundError, ValidationError } from '../workloads/service';
 import { calculateCostPerOutcome } from '../usage/metrics';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+interface DailyOutcomeAggregateRow {
+  total_outcomes: string | number | null;
+  unpriced_events: number | null;
+  priced_events: number | null;
+  known_cost: string | null;
+  total_cost: string | null;
+  period_start: string;
+}
 
 export interface CreateOutcomeDTO {
   workloadId: string;
   outcomeType: string;
   timestamp: Date;
   count: number;
-  metadata?: Record<string, any>;
+  metadata?: JsonObject;
   idempotencyKey?: string;
 }
 
@@ -182,7 +190,7 @@ export class OutcomeService {
 
     if (error) throw new Error(`Failed to calculate daily cost per outcome: ${error.message}`);
 
-    return (data || []).map((d: any) => {
+    return ((data || []) as DailyOutcomeAggregateRow[]).map((d) => {
       const outcomeCount = Number(d.total_outcomes || 0);
       const unpricedEventCount = Number(d.unpriced_events || 0);
       const pricedEventCount = Number(d.priced_events || 0);

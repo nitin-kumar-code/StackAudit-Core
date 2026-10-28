@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AlertService } from '../alerts/service';
 import { WebhookChannel } from '../alerts/channels/webhook';
-import { AuditFinding } from '../../types';
 import dns from 'dns/promises';
 
 vi.mock('dns/promises');

@@ -4,11 +4,13 @@ import { usePathname } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
+interface WorkloadDetail { id: string; name: string; description: string | null; created_at: string }
+
 export default function WorkloadDetailPage() {
   const pathname = usePathname();
   const id = pathname?.split('/').pop();
   
-  const [workload, setWorkload] = useState<any>(null);
+  const [workload, setWorkload] = useState<WorkloadDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

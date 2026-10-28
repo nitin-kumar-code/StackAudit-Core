@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { AuditFinding, MonitoringConfig, Severity } from '../../types';
+import { AuditFinding, MonitoringConfig } from '../../types';
 import { NotificationChannel, NotificationPayload } from './types';
 import { WebhookChannel } from './channels/webhook';
 
@@ -192,7 +192,7 @@ export class AlertService {
       workload: finding.workloadId,
       title: finding.title,
       description: finding.description,
-      evidence: finding.evidence,
+      evidence: { ...finding.evidence },
       timestamp: new Date().toISOString()
     };
 

@@ -1,8 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { CostPerOutcomeResult } from '../../../core/types';
+
+type OutcomeSummary = CostPerOutcomeResult & { workloadName: string };
 
 export default function OutcomesPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<OutcomeSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

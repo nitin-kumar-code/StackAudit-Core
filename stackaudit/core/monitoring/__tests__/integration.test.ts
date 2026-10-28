@@ -64,7 +64,7 @@ describe('Monitoring Engine Integration', () => {
       status: 'OPEN'
     }).select().single();
 
-    const runId = await monitoringService.runMonitoring(orgId);
+    await monitoringService.runMonitoring(orgId);
     
     // Check alert was created
     const { data: alerts } = await supabase.from('alerts').select('*').eq('finding_id', finding.id);

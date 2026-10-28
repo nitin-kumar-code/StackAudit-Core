@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Activity, Plus } from 'lucide-react';
 
+interface WorkloadRow { id: string; name: string; description: string | null }
+
 export default function WorkloadsPage() {
-  const [workloads, setWorkloads] = useState<any[]>([]);
+  const [workloads, setWorkloads] = useState<WorkloadRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

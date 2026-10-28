@@ -4,7 +4,6 @@ const buckets = new Map<string, { tokens: number; lastRefill: number }>();
 
 const DEFAULT_MAX_TOKENS = 5;      // max burst
 const DEFAULT_REFILL_RATE = 1;     // tokens per second
-const DEFAULT_REFILL_INTERVAL = 1; // seconds
 
 export function rateLimit(
   key: string,

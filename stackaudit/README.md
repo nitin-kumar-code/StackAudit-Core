@@ -38,8 +38,8 @@ For deterministic reproduction, keep the seed, day count, exclusive end timestam
 ```sh
 npm run typecheck
 npm run lint
-npm test                 # unit tests
-npm run test:integration # requires a running local Supabase stack and local service-role key
+npm test                 # unit tests; excludes database integration tests
+npm run test:integration # database integration tests; requires Docker, Supabase CLI, and a local service-role key
 npm run build
 npm run seed
 npm run seed:reset

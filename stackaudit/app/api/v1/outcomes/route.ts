@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     
     // Status 201 for Created, 200 for Idempotent match returning existing record
     return NextResponse.json({ data: event, isDuplicate }, { status: isDuplicate ? 200 : 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -78,7 +78,7 @@ export async function GET(req: Request) {
       return { ...result, workloadName: names.get(group.workloadId), totalOutcomeCount: group.count };
     }));
     return NextResponse.json({ data });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (error instanceof ForbiddenError) return NextResponse.json({ error: error.message }, { status: 403 });
     console.error('Outcomes GET Error:', error);

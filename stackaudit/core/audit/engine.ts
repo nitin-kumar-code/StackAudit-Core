@@ -22,9 +22,10 @@ export class AuditEngine {
           findings.push(finding);
         }
         rulesEvaluated.push(rule.id);
-      } catch (error: any) {
-        if (error instanceof SkipError || error.message.startsWith('Skipped:')) {
-          rulesSkipped.push({ ruleId: rule.id, reason: error.message });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (error instanceof SkipError || message.startsWith('Skipped:')) {
+          rulesSkipped.push({ ruleId: rule.id, reason: message });
         } else {
           console.error(`Rule ${rule.id} failed to evaluate:`, error);
           rulesSkipped.push({ ruleId: rule.id, reason: 'Failed to evaluate due to unexpected error' });

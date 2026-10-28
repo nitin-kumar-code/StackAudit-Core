@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAIAdapter } from '../openai';
-import { ProviderAuthenticationError, ProviderApiError } from '../types';
+import { ProviderAuthenticationError } from '../types';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;

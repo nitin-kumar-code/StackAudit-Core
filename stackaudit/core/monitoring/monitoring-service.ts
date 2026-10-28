@@ -2,6 +2,17 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { MonitoringConfig } from '../types';
 import { AuditService } from '../audit/service';
 import { AlertService } from './alerts/service';
+import { AuditCategory } from '../types';
+
+interface MonitoringConfigRow {
+  id: string;
+  organization_id: string;
+  workload_id: string | null;
+  enabled: boolean;
+  config: MonitoringConfig['config'];
+  created_at: string;
+  updated_at: string;
+}
 
 export type MonitoringRunStatus = 'RUNNING' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED' | 'TIMED_OUT';
 
@@ -82,7 +93,7 @@ export class MonitoringService {
     if (!configs || configs.length === 0) return [];
 
     // Group configs by org
-    const byOrg = new Map<string, any[]>();
+    const byOrg = new Map<string, MonitoringConfigRow[]>();
     for (const c of configs) {
       const orgId = c.organization_id;
       if (!byOrg.has(orgId)) byOrg.set(orgId, []);
@@ -135,7 +146,7 @@ export class MonitoringService {
     return runIds;
   }
 
-  private async evaluateConfigs(rawConfigs: any[]): Promise<{
+  private async evaluateConfigs(rawConfigs: MonitoringConfigRow[]): Promise<{
     evaluatedWorkloads: number;
     findingsCount: number;
     alertsCount: number;
@@ -190,15 +201,15 @@ export class MonitoringService {
         // D3: Only auto-resolve categories that were actually evaluated (not skipped)
         const evaluatedRuleIds = new Set(auditResult.rulesEvaluated);
         for (const ruleId of evaluatedRuleIds) {
-          if (!generatedCategories.has(ruleId as any)) {
+          if (isAuditCategory(ruleId) && !generatedCategories.has(ruleId)) {
             const fingerprint = AlertService.generateFingerprint(
               config.organizationId, config.workloadId, ruleId
             );
             await this.alertService.resolveAlert(fingerprint);
           }
         }
-      } catch (err: any) {
-        errors.push(`Config ${rawConfig.id} failed: ${err.message}`);
+      } catch (err: unknown) {
+        errors.push(`Config ${rawConfig.id} failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
@@ -219,4 +230,8 @@ export class MonitoringService {
       .eq('status', 'RUNNING')
       .lt('started_at', cutoff);
   }
+}
+
+function isAuditCategory(value: string): value is AuditCategory {
+  return ['USAGE_SPIKE', 'COST_DRIFT', 'TOKEN_EFFICIENCY', 'MODEL_MIX', 'RETRY_PATTERN'].includes(value);
 }

@@ -10,7 +10,7 @@ export async function GET(req: Request) {
     const orgId = await getAuthOrgId(req);
     const workloads = await workloadService.listWorkloads(orgId);
     return NextResponse.json({ workloads });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     });
     
     return NextResponse.json({ data: workload }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }

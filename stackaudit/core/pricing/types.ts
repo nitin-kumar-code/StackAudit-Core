@@ -1,4 +1,4 @@
-import { PricingRecord, CanonicalUsageEvent } from '../types';
+import { PricingRecord } from '../types';
 
 export interface CostCalculationResult {
   /** All costs are returned as decimal-safe strings */

@@ -37,7 +37,7 @@ export function decryptSecret(encryptedData: string): string {
     decrypted += decipher.final('utf8');
     
     return decrypted;
-  } catch (error) {
+  } catch {
     throw new Error('Failed to decrypt webhook secret');
   }
 }

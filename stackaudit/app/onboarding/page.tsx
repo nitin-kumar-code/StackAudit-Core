@@ -26,8 +26,8 @@ export default function OnboardingPage() {
       }
 
       router.push('/app/dashboard');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unable to set up organization');
       setLoading(false);
     }
   }
@@ -36,7 +36,7 @@ export default function OnboardingPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="max-w-md w-full bg-card rounded-lg shadow-sm border p-8">
         <h1 className="text-2xl font-semibold mb-2 tracking-tight">Welcome to AI Cost Intelligence</h1>
-        <p className="text-muted-foreground mb-6">Let's set up your organization space to begin tracking AI costs.</p>
+        <p className="text-muted-foreground mb-6">Let&apos;s set up your organization space to begin tracking AI costs.</p>
         
         <form onSubmit={handleSetup} className="space-y-4">
           <div>

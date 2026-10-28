@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { WorkloadService, ValidationError, WorkloadNotFoundError } from '../service';
+import { WorkloadService, WorkloadNotFoundError } from '../service';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 const mockInsert = vi.fn();

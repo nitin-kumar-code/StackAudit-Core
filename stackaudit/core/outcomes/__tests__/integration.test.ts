@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 import { OutcomeService } from '../service';
 import crypto from 'crypto';
-import Big from 'big.js';
 
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY! This test is required for analytical guarantees and cannot be skipped.");

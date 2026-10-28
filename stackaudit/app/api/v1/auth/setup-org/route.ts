@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       organizationId: org.id 
     }, { status: 200 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

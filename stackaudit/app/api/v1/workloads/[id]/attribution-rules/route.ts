@@ -14,7 +14,7 @@ export async function GET(
     const orgId = await getAuthOrgId(req);
     const rules = await workloadService.listAttributionRules(orgId, id);
     return NextResponse.json({ data: rules });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
@@ -51,7 +51,7 @@ export async function POST(
       matchValue: body.matchValue
     });
     return NextResponse.json({ data: rule }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }

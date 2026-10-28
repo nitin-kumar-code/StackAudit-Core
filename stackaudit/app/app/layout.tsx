@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { LayoutDashboard, Server, Activity, Target, ShieldAlert, Settings, Bell } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -54,7 +55,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NavItem({ href, icon: Icon, children }: { href: string; icon: any; children: React.ReactNode }) {
+function NavItem({ href, icon: Icon, children }: { href: string; icon: LucideIcon; children: React.ReactNode }) {
   return (
     <Link href={href} className="flex items-center px-3 py-2.5 text-foreground/80 hover:bg-secondary hover:text-foreground rounded-xl transition-colors font-medium">
       <Icon className="w-5 h-5 mr-3 opacity-80 stroke-[1.5]" />

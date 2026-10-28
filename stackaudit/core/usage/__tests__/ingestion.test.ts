@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ingestUsageEvents } from '../ingestion';
 import { CanonicalUsageEvent } from '../../types';
-import { InMemoryPricingCatalog, PricingNotFoundError } from '../../pricing';
+import { InMemoryPricingCatalog } from '../../pricing';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 const mockUpsert = vi.fn();

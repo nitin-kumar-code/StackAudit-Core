@@ -34,7 +34,7 @@ export async function GET(req: Request) {
       const data = await outcomeService.getCostPerOutcome(orgId, workloadId, outcomeType, startTime, endTime);
       return NextResponse.json({ data });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

@@ -16,7 +16,6 @@ describe('Audit Engine Integration', () => {
   const orgId = crypto.randomUUID();
   const wlId = crypto.randomUUID();
   
-  const baselineStart = new Date('2026-09-01T00:00:00Z');
   const baselineEvent = new Date('2026-09-01T12:00:00Z');
   
   const currentStart = new Date('2026-09-02T00:00:00Z');

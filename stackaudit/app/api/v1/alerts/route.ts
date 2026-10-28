@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     if (error) throw error;
 
     return NextResponse.json({ alerts: data }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (error instanceof ForbiddenError) return NextResponse.json({ error: error.message }, { status: 403 });
     console.error('Alerts GET Error:', error);

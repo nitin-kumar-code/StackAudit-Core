@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
     // Load catalog (In a real app, this would be loaded from the DB)
     const { data: catalogRows } = await supabaseAdmin.from('pricing_catalog').select('*');
-    const records = (catalogRows || []).map((r: any) => ({
+    const records = (catalogRows || []).map((r) => ({
       id: r.id,
       provider: r.provider,
       model: r.model,
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       .select('organization_id')
       .eq('is_unpriced', true);
       
-    const uniqueOrgs = Array.from(new Set((orgs || []).map((o: any) => o.organization_id)));
+    const uniqueOrgs = Array.from(new Set((orgs || []).map((o) => o.organization_id)));
     
     let totalAttempted = 0;
     let totalSuccessful = 0;
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
       totalSuccessful,
       totalStillUnpriced
     }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Repricing Cron Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

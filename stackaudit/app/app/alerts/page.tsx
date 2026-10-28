@@ -1,9 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { CheckCircle, Clock } from 'lucide-react';
+
+interface AlertRow { id: string; severity: string; category: string; fingerprint: string; first_triggered_at: string; status: string }
 
 export default function AlertsPage() {
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadAlerts() {
@@ -21,7 +23,22 @@ export default function AlertsPage() {
   }
 
   useEffect(() => {
-    loadAlerts();
+    let active = true;
+    async function loadInitialAlerts() {
+      try {
+        const res = await fetch('/api/v1/alerts');
+        if (res.ok) {
+          const data = await res.json();
+          if (active) setAlerts(data.alerts || []);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void loadInitialAlerts();
+    return () => { active = false; };
   }, []);
 
   async function updateStatus(id: string, action: 'acknowledge' | 'resolve') {

@@ -28,7 +28,6 @@ export class CostDriftRule implements AuditRule {
 
     if (currentOutcomes && baselineOutcomes) {
       const bKeys = Object.keys(baselineOutcomes);
-      const cKeys = Object.keys(currentOutcomes);
       
       if (bKeys.length > 0) {
         const primaryOutcome = bKeys.reduce((a, b) => baselineOutcomes[a] > baselineOutcomes[b] ? a : b);

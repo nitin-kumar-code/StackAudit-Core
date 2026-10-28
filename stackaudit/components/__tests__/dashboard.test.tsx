@@ -5,13 +5,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import DashboardPage from '../../app/app/dashboard/page';
 import '@testing-library/jest-dom';
+import type { ReactNode } from 'react';
 
 // Mock Recharts to avoid DOM layout errors in JSDOM
 vi.mock('recharts', () => {
   const Original = vi.importActual('recharts');
   return {
     ...Original,
-    ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
+    ResponsiveContainer: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
     LineChart: () => <div>LineChartMock</div>,
   };
 });
@@ -22,13 +23,14 @@ describe('Dashboard UI', () => {
   });
 
   it('renders loading state initially', () => {
-    global.fetch = vi.fn(() => new Promise(() => {})) as any;
+    global.fetch = vi.fn(() => new Promise<Response>(() => {})) as unknown as typeof fetch;
     render(<DashboardPage />);
     expect(screen.getByText(/Loading dashboard/i)).toBeInTheDocument();
   });
 
   it('renders KPI values accurately', async () => {
-    global.fetch = vi.fn((url: string) => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
       if (url.includes('/api/v1/dashboard/trends')) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
       }
@@ -45,7 +47,7 @@ describe('Dashboard UI', () => {
           }
         })
       });
-    }) as any;
+    }) as unknown as typeof fetch;
 
     render(<DashboardPage />);
     
@@ -58,7 +60,8 @@ describe('Dashboard UI', () => {
   });
 
   it('handles multiple outcome types securely (C6)', async () => {
-    global.fetch = vi.fn((url: string) => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
       if (url.includes('/api/v1/dashboard/trends')) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
       }
@@ -71,7 +74,7 @@ describe('Dashboard UI', () => {
           }
         })
       });
-    }) as any;
+    }) as unknown as typeof fetch;
 
     render(<DashboardPage />);
     
