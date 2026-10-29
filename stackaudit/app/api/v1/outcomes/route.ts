@@ -58,25 +58,12 @@ export async function GET(req: Request) {
     if (!start || !end || !Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(end)) || Date.parse(start) >= Date.parse(end)) {
       return NextResponse.json({ error: 'Valid start and end parameters are required' }, { status: 400 });
     }
-    const { data: workloads, error: workloadError } = await supabaseAdmin.from('workloads').select('id, name').eq('organization_id', orgId);
-    if (workloadError) throw workloadError;
-    const ids = (workloads || []).map(w => w.id);
-    if (!ids.length) return NextResponse.json({ data: [] });
-    const { data: outcomes, error } = await supabaseAdmin.from('outcome_events').select('workload_id, outcome_type, count')
-      .in('workload_id', ids).gte('timestamp', start).lt('timestamp', end);
-    if (error) throw error;
-    const groups = new Map<string, { workloadId: string; outcomeType: string; count: number }>();
-    for (const row of outcomes || []) {
-      const key = `${row.workload_id}:${row.outcome_type}`;
-      const group = groups.get(key) || { workloadId: row.workload_id, outcomeType: row.outcome_type, count: 0 };
-      group.count += Number(row.count);
-      groups.set(key, group);
+    const startTime = new Date(start);
+    const endTime = new Date(end);
+    if (endTime.getTime() - startTime.getTime() > 366 * 24 * 60 * 60 * 1000) {
+      return NextResponse.json({ error: 'Outcome range cannot exceed 366 days' }, { status: 400 });
     }
-    const names = new Map((workloads || []).map(w => [w.id, w.name]));
-    const data = await Promise.all([...groups.values()].map(async group => {
-      const result = await outcomeService.getCostPerOutcome(orgId, group.workloadId, group.outcomeType, new Date(start), new Date(end));
-      return { ...result, workloadName: names.get(group.workloadId), totalOutcomeCount: group.count };
-    }));
+    const data = await outcomeService.getCostPerOutcomeSummaries(orgId, startTime, endTime);
     return NextResponse.json({ data });
   } catch (error: unknown) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

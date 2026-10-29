@@ -132,5 +132,39 @@ describe('OutcomeService', () => {
         p_start_time: start.toISOString(), p_end_time: end.toISOString()
       }));
     });
+
+    it('maps workload and outcome aggregates without per-event queries', async () => {
+      const start = new Date('2026-09-01T00:00:00Z');
+      const end = new Date('2026-09-02T00:00:00Z');
+      mockRpc.mockResolvedValueOnce({ data: [{
+        workload_id: wlId,
+        workload_name: 'Workload A',
+        outcome_type: 'ticket_resolved',
+        total_outcomes: '4',
+        known_cost: '8.0000',
+        total_cost: '8.0000',
+        is_cost_complete: true,
+        priced_events: 2,
+        unpriced_events: 0
+      }], error: null });
+
+      const results = await service.getCostPerOutcomeSummaries('org_1', start, end);
+
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+      expect(mockRpc).toHaveBeenCalledWith('aggregate_outcome_analytics', {
+        p_organization_id: 'org_1',
+        p_start_time: start.toISOString(),
+        p_end_time: end.toISOString()
+      });
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({
+        workloadId: wlId,
+        workloadName: 'Workload A',
+        outcomeType: 'ticket_resolved',
+        totalOutcomeCount: 4,
+        totalCost: '8.0000',
+        costPerOutcome: '2'
+      });
+    });
   });
 });

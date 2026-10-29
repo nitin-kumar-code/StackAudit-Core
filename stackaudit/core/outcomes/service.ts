@@ -12,6 +12,18 @@ interface DailyOutcomeAggregateRow {
   total_cost: string | null;
   period_start: string;
 }
+interface OutcomeCostAggregateRow {
+  known_cost: string | null;
+  total_cost: string | null;
+  total_outcomes: string | number | null;
+  unpriced_events: number;
+  priced_events: number;
+}
+interface OutcomeAnalyticsRow extends OutcomeCostAggregateRow {
+  workload_id: string;
+  workload_name: string;
+  outcome_type: string;
+}
 
 export interface CreateOutcomeDTO {
   workloadId: string;
@@ -27,10 +39,16 @@ export class OutcomeService {
 
   private validateAnalyticsParams(workloadId: string, startTime: Date, endTime: Date) {
     if (!UUID_REGEX.test(workloadId)) throw new ValidationError('Invalid workloadId format');
-    if (startTime >= endTime) throw new ValidationError('startTime must be strictly before endTime');
-    
-    const diffDays = (endTime.getTime() - startTime.getTime()) / (1000 * 3600 * 24);
-    if (diffDays > 366) throw new ValidationError('Query range cannot exceed 366 days');
+    this.validateAnalyticsRange(startTime, endTime);
+  }
+
+  private validateAnalyticsRange(startTime: Date, endTime: Date) {
+    if (!Number.isFinite(startTime.getTime()) || !Number.isFinite(endTime.getTime()) || startTime >= endTime) {
+      throw new ValidationError('startTime must be a valid date strictly before endTime');
+    }
+    if (endTime.getTime() - startTime.getTime() > 366 * 24 * 60 * 60 * 1000) {
+      throw new ValidationError('Query range cannot exceed 366 days');
+    }
   }
 
   async createOutcome(organizationId: string, dto: CreateOutcomeDTO): Promise<{ event: OutcomeEvent, isDuplicate: boolean }> {
@@ -137,20 +155,43 @@ export class OutcomeService {
 
     if (error) throw new Error(`Failed to calculate cost per outcome: ${error.message}`);
 
-    const result = data?.[0] || { known_cost: '0', total_cost: '0', total_outcomes: '0', unpriced_events: 0, priced_events: 0 };
-    const totalOutcomeCount = Number(result.total_outcomes || 0);
-    const unpricedEventCount = Number(result.unpriced_events || 0);
-    const pricedEventCount = Number(result.priced_events || 0);
+    const result = (data?.[0] || { known_cost: '0', total_cost: '0', total_outcomes: '0', unpriced_events: 0, priced_events: 0 }) as OutcomeCostAggregateRow;
+    return this.toCostPerOutcomeResult(workloadId, outcomeType, startTime, endTime, result);
+  }
+
+  async getCostPerOutcomeSummaries(
+    organizationId: string,
+    startTime: Date,
+    endTime: Date
+  ): Promise<Array<CostPerOutcomeResult & { workloadName: string }>> {
+    this.validateAnalyticsRange(startTime, endTime);
+    const { data, error } = await this.supabase.rpc('aggregate_outcome_analytics', {
+      p_organization_id: organizationId,
+      p_start_time: startTime.toISOString(),
+      p_end_time: endTime.toISOString()
+    });
+    if (error) throw new Error(`Failed to aggregate outcome summaries: ${error.message}`);
+
+    return ((data || []) as OutcomeAnalyticsRow[]).map(row => ({
+      ...this.toCostPerOutcomeResult(row.workload_id, row.outcome_type, startTime, endTime, row),
+      workloadName: row.workload_name
+    }));
+  }
+
+  private toCostPerOutcomeResult(
+    workloadId: string,
+    outcomeType: string,
+    startTime: Date,
+    endTime: Date,
+    row: OutcomeCostAggregateRow
+  ): CostPerOutcomeResult {
+    const totalOutcomeCount = Number(row.total_outcomes || 0);
+    const unpricedEventCount = Number(row.unpriced_events || 0);
+    const pricedEventCount = Number(row.priced_events || 0);
     const isCostComplete = unpricedEventCount === 0;
-    const knownCost = pricedEventCount > 0 || unpricedEventCount === 0 ? String(result.known_cost ?? '0') : null;
-    const totalCost = isCostComplete ? String(result.total_cost ?? '0') : null;
-    const cpo = calculateCostPerOutcome({
-      knownCost,
-      totalCost,
-      isComplete: isCostComplete,
-      pricedEventCount,
-      unpricedEventCount
-    }, totalOutcomeCount);
+    const knownCost = pricedEventCount > 0 || unpricedEventCount === 0 ? String(row.known_cost ?? '0') : null;
+    const totalCost = isCostComplete ? String(row.total_cost ?? '0') : null;
+    const cpo = calculateCostPerOutcome({ knownCost, totalCost, isComplete: isCostComplete, pricedEventCount, unpricedEventCount }, totalOutcomeCount);
 
     return {
       workloadId,
@@ -165,7 +206,6 @@ export class OutcomeService {
       costPerOutcome: cpo.value,
       unpricedEventCount,
       availabilityReason: cpo.reason,
-      
       currency: 'USD',
       costAllocationNote: 'Unallocated. This workload cost per outcome represents the total workload cost divided by this outcome type. It does not partition cost among different outcome types.'
     };

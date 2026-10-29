@@ -45,6 +45,22 @@ npm run seed
 npm run seed:reset
 ```
 
+## Analytics query contracts
+
+The Usage API uses the half-open time interval `[start, end)`. It defaults to 50 events per page, accepts at most 100, orders newest first by timestamp and event ID, and accepts ranges up to 366 days. Provider, model, and workload filters are applied before pagination. The response summary and filter options cover the entire filtered range, including when the requested page has no events.
+
+The database aggregation contracts are defined in `supabase/migrations/20261028000000_query_scalability.sql`:
+
+- `aggregate_usage_page` returns a JSON object containing one bounded event page, whole-filtered-range totals, filter options, and pagination metadata. Monetary totals are decimal strings; `totalCost` is null when any matching usage is unpriced.
+- `aggregate_dashboard_summary` returns organization totals, workload totals, and unattributed totals from the same usage scan.
+- `aggregate_dashboard_trends_v2` returns one UTC-day row per day in the requested interval, with cost completeness, token/request totals, and outcomes scoped to the organization’s workloads. The original three-column `aggregate_dashboard_trends` contract remains available as a wrapper.
+- `aggregate_audit_window_v2` returns workload-scoped usage and outcome aggregates for one audit window.
+- `aggregate_outcome_analytics` returns workload/outcome-type groups with cost totals scoped to each workload.
+
+These functions are called by the server with the service-role client and use `[start, end)` bounds. The Usage API enforces page size and range bounds before calling the database; `aggregate_usage_page` also enforces the page-size ceiling.
+
+The same forward migration adds indexes for organization/time pagination, provider/model-filtered usage reads, reverse workload attribution lookups, and organization/workload outcome windows. Existing outcome-type/time and attribution-rule uniqueness indexes remain in use for their matching query paths.
+
 ## Architecture
 
 - `core/providers` normalizes provider-specific usage into canonical events.

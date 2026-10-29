@@ -1,60 +1,317 @@
-import { describe, it, expect } from 'vitest';
-import { GET as getDashboardSummary } from '../dashboard/summary/route';
-import { GET as getUsage } from './route';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createClient } from '@supabase/supabase-js';
+import Big from 'big.js';
+import crypto from 'crypto';
 
-// Helper to construct a mock request
-function makeRequest(urlPath: string, searchParams: Record<string, string>) {
-  const url = new URL(`http://localhost${urlPath}`);
-  for (const [k, v] of Object.entries(searchParams)) {
-    url.searchParams.set(k, v);
-  }
-  return new Request(url.toString(), {
-    method: 'GET',
-    headers: new Headers({
-      'cookie': 'mock=cookie' // Bypass potential cookie errors
-    })
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY; database analytics integration tests require the local service-role key.');
+}
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
+if (!['localhost', '127.0.0.1'].includes(new URL(supabaseUrl).hostname)) {
+  throw new Error('Analytics integration tests may only write to a local Supabase database.');
+}
+
+const supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const organizationId = crypto.randomUUID();
+const workloadAId = crypto.randomUUID();
+const workloadBId = crypto.randomUUID();
+const start = new Date('2026-10-01T00:00:00.000Z');
+const end = new Date('2026-10-02T00:00:00.000Z');
+const datasetSize = 1200;
+
+interface UsageFixture {
+  id: string;
+  organization_id: string;
+  provider: string;
+  model: string;
+  timestamp: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  request_count: number;
+  provider_reference: string;
+  api_key_id: string;
+  calculated_cost: string;
+  is_unpriced: boolean;
+  raw_response_hash: string;
+}
+
+const usageRows: UsageFixture[] = [];
+
+function fixtureRow(
+  reference: string,
+  timestamp: Date,
+  provider: string,
+  model: string,
+  apiKeyId: string,
+  inputTokens: number,
+  outputTokens: number,
+  requestCount: number,
+  cost: string,
+  isUnpriced: boolean
+): UsageFixture {
+  return {
+    id: crypto.randomUUID(),
+    organization_id: organizationId,
+    provider,
+    model,
+    timestamp: timestamp.toISOString(),
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cache_read_tokens: 3,
+    cache_creation_tokens: 1,
+    request_count: requestCount,
+    provider_reference: reference,
+    api_key_id: apiKeyId,
+    calculated_cost: cost,
+    is_unpriced: isUnpriced,
+    raw_response_hash: 'analytics-fixture'
+  };
+}
+
+function rpcUsagePage(options: {
+  page?: number;
+  pageSize?: number;
+  provider?: string | null;
+  model?: string | null;
+  workloadId?: string | null;
+  startTime?: Date;
+  endTime?: Date;
+} = {}) {
+  return supabase.rpc('aggregate_usage_page', {
+    p_organization_id: organizationId,
+    p_start_time: (options.startTime || start).toISOString(),
+    p_end_time: (options.endTime || end).toISOString(),
+    p_provider: options.provider || null,
+    p_model: options.model || null,
+    p_workload_id: options.workloadId || null,
+    p_page: options.page || 1,
+    p_page_size: options.pageSize || 50
   });
 }
 
-describe('Overview and Usage Data Reconciliation', () => {
-  const ranges = [90, 30, 7];
+function assertNoError(error: { message: string } | null) {
+  if (error) throw new Error(error.message);
+}
 
-  for (const days of ranges) {
-    it(`Reconciles total cost, tokens, and requests for the last ${days} days`, async () => {
-      const start = new Date(Date.now() - days * 86400000).toISOString();
-      const end = new Date().toISOString();
+describe('Database analytics aggregation and pagination', () => {
+  beforeAll(async () => {
+    const orgInsert = await supabase.from('organizations').insert({ id: organizationId, name: 'Query Scalability Fixture' });
+    assertNoError(orgInsert.error);
+    const workloadInsert = await supabase.from('workloads').insert([
+      { id: workloadAId, organization_id: organizationId, name: 'Analytics workload A' },
+      { id: workloadBId, organization_id: organizationId, name: 'Analytics workload B' }
+    ]);
+    assertNoError(workloadInsert.error);
+    const rulesInsert = await supabase.from('attribution_rules').insert([
+      { organization_id: organizationId, workload_id: workloadAId, provider: 'openai', match_type: 'api_key', match_value: 'key-a' },
+      { organization_id: organizationId, workload_id: workloadBId, provider: 'openai', match_type: 'api_key', match_value: 'key-b' },
+      { organization_id: organizationId, workload_id: workloadBId, provider: 'anthropic', match_type: 'api_key', match_value: 'key-b' }
+    ]);
+    assertNoError(rulesInsert.error);
 
-      // 1. Fetch Dashboard Summary
-      const reqDash = makeRequest('/api/v1/dashboard/summary', { start, end });
-      const resDash = await getDashboardSummary(reqDash);
-      const dashData = await resDash.json();
+    for (let index = 0; index < datasetSize; index++) {
+      const bucket = index % 4;
+      const provider = bucket < 2 ? 'openai' : 'anthropic';
+      const model = bucket === 0 ? 'gpt-4' : bucket === 1 ? 'gpt-mini' : 'claude';
+      const apiKeyId = bucket === 0 ? 'key-a' : bucket === 1 || bucket === 2 ? 'key-b' : 'unmapped-key';
+      const isUnpriced = index % 148 === 2;
+      usageRows.push(fixtureRow(
+        `dataset-${index}`,
+        new Date(start.getTime() + Math.floor(index / 4) * 1000),
+        provider,
+        model,
+        apiKeyId,
+        10,
+        5,
+        index % 3 + 1,
+        isUnpriced ? '0.0000' : '0.0100',
+        isUnpriced
+      ));
+    }
+    usageRows.push(fixtureRow('boundary-start', start, 'anthropic', 'claude', 'key-b', 100, 2, 7, '0.5000', true));
+    usageRows.push(fixtureRow('boundary-end', end, 'anthropic', 'claude', 'key-b', 500, 1, 9, '1.0000', false));
 
-      // 2. Fetch Usage Summary
-      const reqUsage = makeRequest('/api/v1/usage', { start, end, limit: '1' });
-      const resUsage = await getUsage(reqUsage);
-      const usageData = await resUsage.json();
+    for (let offset = 0; offset < usageRows.length; offset += 200) {
+      const result = await supabase.from('usage_events').insert(usageRows.slice(offset, offset + 200));
+      assertNoError(result.error);
+    }
 
-      // Ensure they both fetched successfully
-      expect(resDash.status).toBe(200);
-      expect(resUsage.status).toBe(200);
+    const outcomeInsert = await supabase.from('outcome_events').insert([
+      { organization_id: organizationId, workload_id: workloadAId, outcome_type: 'ticket_resolved', timestamp: new Date(start.getTime() + 10_000).toISOString(), count: 9 },
+      { organization_id: organizationId, workload_id: workloadBId, outcome_type: 'ticket_resolved', timestamp: new Date(start.getTime() + 20_000).toISOString(), count: 3 }
+    ]);
+    assertNoError(outcomeInsert.error);
+  }, 120_000);
 
-      // Extract metrics
-      const dashMetrics = {
-        cost: dashData.summary.totalCost,
-        tokens: dashData.summary.totalTokens,
-        requests: dashData.summary.totalRequests
-      };
+  afterAll(async () => {
+    await supabase.from('organizations').delete().eq('id', organizationId);
+  });
 
-      const usageMetrics = {
-        cost: usageData.summary.totalCost,
-        tokens: usageData.summary.totalTokens,
-        requests: usageData.summary.totalRequests
-      };
+  it('filters before pagination, uses a stable timestamp/id order, and summarizes all matching pages', async () => {
+    const options = { provider: 'anthropic', model: 'claude', workloadId: workloadBId, pageSize: 50 };
+    const first = await rpcUsagePage(options);
+    const repeatedFirst = await rpcUsagePage(options);
+    const second = await rpcUsagePage({ ...options, page: 2 });
+    assertNoError(first.error);
+    assertNoError(repeatedFirst.error);
+    assertNoError(second.error);
 
-      // Ensure they match exactly (within floating point tolerances for cost)
-      expect(usageMetrics.requests).toBe(dashMetrics.requests);
-      expect(usageMetrics.tokens).toBe(dashMetrics.tokens);
-      expect(Math.abs(usageMetrics.cost - dashMetrics.cost)).toBeLessThan(0.0001);
+    const body = first.data as { events: Array<{ id: string; provider: string; model: string; workload_id: string; calculated_cost: string }>; summary: Record<string, unknown>; pagination: { total: number; totalPages: number; limit: number } };
+    const repeatedBody = repeatedFirst.data as typeof body;
+    const secondBody = second.data as typeof body;
+    const expected = usageRows.filter(row => row.timestamp >= start.toISOString() && row.timestamp < end.toISOString()
+      && row.provider === 'anthropic' && row.model === 'claude' && row.api_key_id === 'key-b');
+    const expectedKnownCost = expected.reduce((total, row) => total.plus(row.is_unpriced ? 0 : row.calculated_cost), new Big(0));
+
+    expect(body.events).toHaveLength(50);
+    expect(body.events.every(row => row.provider === 'anthropic' && row.model === 'claude' && row.workload_id === workloadBId)).toBe(true);
+    expect(body.events.map(row => row.id)).toEqual(repeatedBody.events.map(row => row.id));
+    expect(body.events.map(row => row.id).some(id => secondBody.events.some(row => row.id === id))).toBe(false);
+    expect(body.summary.totalEvents).toBe(expected.length);
+    expect(body.summary.totalRequests).toBe(expected.reduce((total, row) => total + row.request_count, 0));
+    expect(body.summary.totalTokens).toBe(expected.reduce((total, row) => total + row.input_tokens + row.output_tokens, 0));
+    expect(new Big(String(body.summary.knownCost)).eq(expectedKnownCost)).toBe(true);
+    expect(body.summary.unpricedEventCount).toBe(expected.filter(row => row.is_unpriced).length);
+    expect(body.summary.totalCost).toBeNull();
+    expect(body.pagination).toEqual({ page: 1, limit: 50, total: expected.length, totalPages: Math.ceil(expected.length / 50) });
+    expect(typeof body.events[0].calculated_cost).toBe('string');
+  });
+
+  it('preserves the half-open range, empty pages, and empty-result summary', async () => {
+    const allEvents = await rpcUsagePage({ pageSize: 100 });
+    const startBoundary = await rpcUsagePage({
+      provider: 'anthropic', model: 'claude', workloadId: workloadBId,
+      startTime: start, endTime: new Date(start.getTime() + 1000)
     });
-  }
+    const empty = await rpcUsagePage({ provider: 'provider-does-not-exist' });
+    const beyondEnd = await rpcUsagePage({ provider: 'anthropic', page: 999, pageSize: 100 });
+    assertNoError(allEvents.error);
+    assertNoError(empty.error);
+    assertNoError(beyondEnd.error);
+
+    const allBody = allEvents.data as { events: Array<{ id: string }>; summary: { totalEvents: number } };
+    const startBody = startBoundary.data as { events: Array<{ id: string }>; summary: { totalEvents: number } };
+    const emptyBody = empty.data as { events: unknown[]; summary: { totalEvents: number; totalRequests: number; knownCost: string; totalCost: string; isCostComplete: boolean }; pagination: { totalPages: number } };
+    const beyondBody = beyondEnd.data as { events: unknown[]; summary: { totalEvents: number }; pagination: { total: number } };
+    expect(allBody.summary.totalEvents).toBe(datasetSize + 1);
+    expect(startBody.summary.totalEvents).toBe(2);
+    expect(startBody.events.some(row => row.id === usageRows.at(-2)?.id)).toBe(true);
+    expect(allBody.events.some(row => row.id === usageRows.at(-1)?.id)).toBe(false);
+    expect(emptyBody.events).toEqual([]);
+    expect(emptyBody.summary).toMatchObject({ totalEvents: 0, totalRequests: 0, knownCost: '0', totalCost: '0', isCostComplete: true });
+    expect(emptyBody.pagination.totalPages).toBe(0);
+    expect(beyondBody.events).toEqual([]);
+    expect(beyondBody.summary.totalEvents).toBe(beyondBody.pagination.total);
+  });
+
+  it('reconciles dashboard, trend, workload, provider/model, and outcome aggregates', async () => {
+    const [dashboard, trends, outcomes] = await Promise.all([
+      supabase.rpc('aggregate_dashboard_summary', {
+        p_organization_id: organizationId,
+        p_start_time: start.toISOString(),
+        p_end_time: end.toISOString()
+      }),
+      supabase.rpc('aggregate_dashboard_trends', {
+        p_organization_id: organizationId,
+        p_start_time: start.toISOString(),
+        p_end_time: end.toISOString()
+      }),
+      supabase.rpc('aggregate_outcome_analytics', {
+        p_organization_id: organizationId,
+        p_start_time: start.toISOString(),
+        p_end_time: end.toISOString()
+      })
+    ]);
+    assertNoError(dashboard.error);
+    assertNoError(trends.error);
+    assertNoError(outcomes.error);
+
+    const dashboardBody = dashboard.data as {
+      summary: { totalTokens: number; totalRequests: number; totalOutcomes: number; totalCost: string | null; knownCost: string | null };
+      workloads: Array<{ id: string; usage: number; totalRequests: number; outcomes: number; knownCost: string | null; cost: string | null }>;
+      unattributed: { usage: number; totalRequests: number; eventCount: number };
+    };
+    const trendRows = trends.data as Array<{ total_tokens: string; request_count: number; outcome_count: string; total_cost: string | null }>;
+    const outcomeRows = outcomes.data as Array<{ workload_id: string; workload_name: string; outcome_type: string; total_outcomes: string; total_cost: string | null }>;
+    expect(dashboardBody.summary.totalCost).toBeNull();
+    expect(dashboardBody.summary.knownCost).not.toBeNull();
+    expect(dashboardBody.workloads.reduce((sum, row) => sum + row.usage, 0) + dashboardBody.unattributed.usage).toBe(dashboardBody.summary.totalTokens);
+    expect(dashboardBody.workloads.reduce((sum, row) => sum + row.totalRequests, 0) + dashboardBody.unattributed.totalRequests).toBe(dashboardBody.summary.totalRequests);
+    expect(dashboardBody.summary.totalOutcomes).toBe(12);
+    expect(trendRows).toHaveLength(1);
+    expect(Number(trendRows[0].total_tokens)).toBe(dashboardBody.summary.totalTokens);
+    expect(trendRows[0].request_count).toBe(dashboardBody.summary.totalRequests);
+    expect(Number(trendRows[0].outcome_count)).toBe(dashboardBody.summary.totalOutcomes);
+    expect(trendRows[0].total_cost).toBeNull();
+
+    for (const workload of dashboardBody.workloads) {
+      const usage = await rpcUsagePage({ workloadId: workload.id, pageSize: 100 });
+      assertNoError(usage.error);
+      const usageBody = usage.data as { summary: { totalTokens: number; totalRequests: number; totalCost: string | null; knownCost: string | null } };
+      expect(usageBody.summary.totalTokens).toBe(workload.usage);
+      expect(usageBody.summary.totalRequests).toBe(workload.totalRequests);
+      expect(usageBody.summary.totalCost).toBe(workload.cost);
+      expect(usageBody.summary.knownCost).toBe(workload.knownCost);
+    }
+
+    for (const field of ['provider', 'model'] as const) {
+      const values = [...new Set(usageRows.filter(row => row.timestamp < end.toISOString()).map(row => row[field]))];
+      let tokenSum = 0;
+      let requestSum = 0;
+      for (const value of values) {
+        const result = await rpcUsagePage({ [field]: value, pageSize: 100 });
+        assertNoError(result.error);
+        const body = result.data as { summary: { totalTokens: number; totalRequests: number } };
+        tokenSum += body.summary.totalTokens;
+        requestSum += body.summary.totalRequests;
+      }
+      expect(tokenSum).toBe(dashboardBody.summary.totalTokens);
+      expect(requestSum).toBe(dashboardBody.summary.totalRequests);
+    }
+
+    expect(outcomeRows).toHaveLength(2);
+    expect(outcomeRows.find(row => row.workload_id === workloadAId)?.total_cost)
+      .not.toBe(outcomeRows.find(row => row.workload_id === workloadBId)?.total_cost);
+    expect(outcomeRows.every(row => row.outcome_type === 'ticket_resolved')).toBe(true);
+  });
+
+  it('measures raw-row versus bounded aggregate payloads on a deterministic dataset', async () => {
+    const beforeStarted = performance.now();
+    const before = await supabase.from('usage_events').select('*')
+      .eq('organization_id', organizationId)
+      .gte('timestamp', start.toISOString())
+      .lt('timestamp', end.toISOString())
+      .order('timestamp', { ascending: false });
+    const beforeMilliseconds = performance.now() - beforeStarted;
+    assertNoError(before.error);
+
+    const afterStarted = performance.now();
+    const after = await rpcUsagePage({ pageSize: 100 });
+    const afterMilliseconds = performance.now() - afterStarted;
+    assertNoError(after.error);
+
+    const rawRows = before.data || [];
+    const aggregate = after.data as { events: unknown[]; summary: { totalEvents: number } };
+    const rawPayloadBytes = Buffer.byteLength(JSON.stringify(rawRows));
+    const aggregatePayloadBytes = Buffer.byteLength(JSON.stringify(aggregate));
+    console.info(JSON.stringify({
+      analyticsMeasurement: {
+        deterministicDatasetRowsInRange: datasetSize + 1,
+        legacyRawRowsReturnedByPostgrest: rawRows.length,
+        boundedRpcEventsReturned: aggregate.events.length,
+        legacyRawPayloadBytes: rawPayloadBytes,
+        boundedAggregatePayloadBytes: aggregatePayloadBytes,
+        legacyRawQueryMilliseconds: Number(beforeMilliseconds.toFixed(2)),
+        boundedRpcQueryMilliseconds: Number(afterMilliseconds.toFixed(2)),
+        productionUsageDatabaseCalls: 1
+      }
+    }));
+
+    expect(aggregate.summary.totalEvents).toBe(datasetSize + 1);
+    expect(aggregate.events.length).toBe(100);
+    expect(aggregatePayloadBytes).toBeLessThan(rawPayloadBytes);
+  });
 });

@@ -4,8 +4,6 @@ import { AuditFinding, AuditCategory } from '../types';
 import { AuditEngine } from './engine';
 import { ALL_RULES } from './rules';
 import { WorkloadNotFoundError, ValidationError } from '../workloads/service';
-import { getRequestCount, getTotalTokenCount } from '../usage/metrics';
-import Big from 'big.js';
 
 export interface RunAuditDTO {
   workloadId: string;
@@ -18,6 +16,20 @@ export interface RunAuditResult {
   findings: AuditFinding[];
   rulesEvaluated: string[];
   rulesSkipped: { ruleId: string; reason: string }[];
+}
+
+interface AuditWindowAggregate {
+  known_cost: string;
+  total_tokens: string;
+  request_count: number;
+  unpriced_events: number;
+  models: Record<string, {
+    known_cost: string;
+    total_tokens: string;
+    request_count: number;
+    unpriced_events: number;
+  }>;
+  outcomes: Record<string, string>;
 }
 
 export class AuditService {
@@ -81,21 +93,20 @@ export class AuditService {
       end: currentWindow.start
     };
 
-    const currentMetrics = await this.loadMetrics(organizationId, dto.workloadId, currentWindow);
-    const baselineMetrics = await this.loadMetrics(organizationId, dto.workloadId, baselineWindow);
-
-    const currentOutcomes = await this.loadOutcomes(organizationId, dto.workloadId, currentWindow);
-    const baselineOutcomes = await this.loadOutcomes(organizationId, dto.workloadId, baselineWindow);
+    const [current, baseline] = await Promise.all([
+      this.loadWindowAggregate(organizationId, dto.workloadId, currentWindow),
+      this.loadWindowAggregate(organizationId, dto.workloadId, baselineWindow)
+    ]);
 
     const context: AuditContext = {
       organizationId,
       workloadId: dto.workloadId,
       currentWindow,
       baselineWindow,
-      currentMetrics,
-      baselineMetrics,
-      currentOutcomes,
-      baselineOutcomes
+      currentMetrics: current.metrics,
+      baselineMetrics: baseline.metrics,
+      currentOutcomes: current.outcomes,
+      baselineOutcomes: baseline.outcomes
     };
 
     const evaluation = this.engine.evaluate(context);
@@ -122,81 +133,40 @@ export class AuditService {
     };
   }
 
-  private async loadMetrics(orgId: string, workloadId: string, window: TimeWindow): Promise<MetricSummary> {
-    const { data: rules } = await this.supabase
-      .from('attribution_rules')
-      .select('provider, match_type, match_value')
-      .eq('organization_id', orgId)
-      .eq('workload_id', workloadId);
-      
-    const apiKeys = (rules || []).filter(r => r.match_type?.toLowerCase() === 'api_key').map(r => `${r.provider}:${r.match_value}`);
-    
-    const { data: rawUsage, error } = await this.supabase
-      .from('usage_events')
-      .select('calculated_cost, is_unpriced, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, request_count, model, provider, api_key_id')
-      .eq('organization_id', orgId)
-      .gte('timestamp', window.start.toISOString())
-      .lt('timestamp', window.end.toISOString());
-
-    if (error) throw new Error(`Failed to load usage for audit: ${error.message}`);
-    
-    if (!rawUsage || rawUsage.length === 0) {
-      return { totalCost: 0, totalTokens: 0, requestCount: 0, unpricedEvents: 0, models: {} };
-    }
-    
-    let totalCost = new Big(0);
-    let totalTokens = 0;
-    let reqCount = 0;
-    let unpricedEvents = 0;
-    const modelMap: Record<string, { cost: number; tokens: number; requests: number }> = {};
-    const modelCosts: Record<string, Big> = {};
-
-    rawUsage.forEach(row => {
-      if (!apiKeys.includes(`${row.provider}:${row.api_key_id}`)) return;
-      const cost = row.is_unpriced ? null : new Big(String(row.calculated_cost ?? 0));
-      const tokens = getTotalTokenCount(row);
-      const reqs = getRequestCount(row.request_count);
-      
-      if (cost) totalCost = totalCost.plus(cost); else unpricedEvents++;
-      totalTokens += tokens;
-      reqCount += reqs;
-      
-      const modelKey = row.model || 'unknown';
-      if (!modelMap[modelKey]) {
-        modelMap[modelKey] = { cost: 0, tokens: 0, requests: 0 };
-        modelCosts[modelKey] = new Big(0);
-      }
-      if (cost) modelCosts[modelKey] = modelCosts[modelKey].plus(cost);
-      modelMap[modelKey].tokens += tokens;
-      modelMap[modelKey].requests += reqs;
+  private async loadWindowAggregate(
+    orgId: string,
+    workloadId: string,
+    window: TimeWindow
+  ): Promise<{ metrics: MetricSummary; outcomes: Record<string, number> }> {
+    const { data, error } = await this.supabase.rpc('aggregate_audit_window_v2', {
+      p_organization_id: orgId,
+      p_workload_id: workloadId,
+      p_start_time: window.start.toISOString(),
+      p_end_time: window.end.toISOString()
     });
 
+    if (error) throw new Error(`Failed to aggregate audit window: ${error.message}`);
+    const aggregate = (data?.[0] || {
+      known_cost: '0', total_tokens: '0', request_count: 0, unpriced_events: 0, models: {}, outcomes: {}
+    }) as AuditWindowAggregate;
+
+    const models = Object.fromEntries(Object.entries(aggregate.models || {}).map(([model, values]) => [model, {
+      cost: Number(values.known_cost),
+      tokens: Number(values.total_tokens),
+      requests: Number(values.request_count)
+    }]));
+    const outcomes = Object.fromEntries(Object.entries(aggregate.outcomes || {}).map(([type, count]) => [type, Number(count)]));
+
     return {
-      totalCost: Number(totalCost.toString()),
-      totalTokens,
-      requestCount: reqCount,
-      unpricedEvents,
-      models: Object.fromEntries(Object.entries(modelMap).map(([model, metrics]) => [model, { ...metrics, cost: Number(modelCosts[model].toString()) }]))
+      metrics: {
+        totalCost: Number(aggregate.known_cost),
+        totalTokens: Number(aggregate.total_tokens),
+        requestCount: Number(aggregate.request_count),
+        unpricedEvents: Number(aggregate.unpriced_events),
+        models
+      },
+      outcomes
     };
-  }
-
-  private async loadOutcomes(orgId: string, workloadId: string, window: TimeWindow): Promise<Record<string, number>> {
-    const { data, error } = await this.supabase
-      .from('outcome_events')
-      .select('outcome_type, count')
-      .eq('workload_id', workloadId)
-      .gte('timestamp', window.start.toISOString())
-      .lt('timestamp', window.end.toISOString());
-
-    if (error) throw new Error(`Failed to load outcomes for audit: ${error.message}`);
-
-    const outcomes: Record<string, number> = {};
-    for (const row of data || []) {
-      const type = row.outcome_type;
-      outcomes[type] = (outcomes[type] || 0) + Number(row.count);
-    }
-
-    return outcomes;
   }
 
   private async persistFindings(
