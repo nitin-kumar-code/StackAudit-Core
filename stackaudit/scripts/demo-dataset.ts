@@ -2,10 +2,15 @@ import { createHash } from 'node:crypto';
 import { InMemoryPricingCatalog, PricingNotFoundError } from '../core/pricing';
 import { CanonicalUsageEvent, PricingRecord } from '../core/types';
 
-export const DEMO_ORGANIZATION_ID = '8a775c7f-e31c-8f9b-9000-000000000001';
+export const DEMO_ORGANIZATION_ID = process.env.DEMO_ORG_ID || '8a775c7f-e31c-8f9b-9000-000000000001';
 export const DEMO_SEED_KEY = 'stackaudit-demo-v1';
 export const DEMO_DATASET_DAYS = 90;
 export const DEMO_DATASET_END = '2026-10-17T00:00:00.000Z';
+
+export function getDefaultDatasetEnd(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+}
 
 export const DEMO_WORKLOADS = [
   { id: '8a775c7f-e31c-8f9b-9000-000000000002', name: 'Support Triage', description: 'Automated ticket routing' },

@@ -1,0 +1,99 @@
+{
+  "version": "1.0.0",
+  "name": "reference-pricing-v1",
+  "description": "Reviewed sample reference pricing fixtures for major OpenAI and Anthropic models based on officially published provider pricing.",
+  "generatedAt": "2026-10-30T00:00:00.000Z",
+  "records": [
+    {
+      "id": "4114981c-4560-4825-8985-6685f880b09c",
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "input_price": "0.15",
+      "output_price": "0.60",
+      "cache_read_price": "0.075",
+      "cache_creation_price": "0.00",
+      "effective_from": "2024-07-18T00:00:00.000Z",
+      "effective_until": null,
+      "source": "sample-reference:openai:gpt-4o-mini:2024-07-18",
+      "description": "OpenAI official launch list pricing for GPT-4o mini ($0.15/1M input, $0.60/1M output, $0.075/1M cached input read). Prompt caching includes 50% read discount."
+    },
+    {
+      "id": "27292f50-b4a6-4121-a17c-1cf2c1c22d98",
+      "provider": "openai",
+      "model": "gpt-4o",
+      "input_price": "5.00",
+      "output_price": "15.00",
+      "cache_read_price": "2.50",
+      "cache_creation_price": "0.00",
+      "effective_from": "2024-05-13T00:00:00.000Z",
+      "effective_until": "2024-08-06T00:00:00.000Z",
+      "source": "sample-reference:openai:gpt-4o:2024-05-13",
+      "description": "OpenAI initial launch list pricing for GPT-4o ($5.00/1M input, $15.00/1M output). Effective May 13, 2024 through August 6, 2024."
+    },
+    {
+      "id": "a90ae2f9-d44c-436f-8c94-fa7d61f4c88a",
+      "provider": "openai",
+      "model": "gpt-4o",
+      "input_price": "2.50",
+      "output_price": "10.00",
+      "cache_read_price": "1.25",
+      "cache_creation_price": "0.00",
+      "effective_from": "2024-08-06T00:00:00.000Z",
+      "effective_until": null,
+      "source": "sample-reference:openai:gpt-4o:2024-08-06",
+      "description": "OpenAI revised list pricing for GPT-4o ($2.50/1M input, $10.00/1M output, $1.25/1M cached input read). Effective from August 6, 2024 price drop."
+    },
+    {
+      "id": "883a9f72-2e76-4ffb-a9ca-09dea463c12e",
+      "provider": "anthropic",
+      "model": "claude-3-haiku-20240307",
+      "input_price": "0.25",
+      "output_price": "1.25",
+      "cache_read_price": "0.025",
+      "cache_creation_price": "0.30",
+      "effective_from": "2024-03-07T00:00:00.000Z",
+      "effective_until": null,
+      "source": "sample-reference:anthropic:claude-3-haiku-20240307:2024-03-07",
+      "description": "Anthropic official list pricing for Claude 3 Haiku ($0.25/1M input, $1.25/1M output, $0.025/1M prompt cache read, $0.30/1M prompt cache write)."
+    },
+    {
+      "id": "263e4085-fd44-4abc-a8b9-5f3faf457906",
+      "provider": "anthropic",
+      "model": "claude-3-sonnet-20240229",
+      "input_price": "3.00",
+      "output_price": "15.00",
+      "cache_read_price": "0.30",
+      "cache_creation_price": "3.75",
+      "effective_from": "2024-02-29T00:00:00.000Z",
+      "effective_until": null,
+      "source": "sample-reference:anthropic:claude-3-sonnet-20240229:2024-02-29",
+      "description": "Anthropic official list pricing for Claude 3 Sonnet ($3.00/1M input, $15.00/1M output, $0.30/1M prompt cache read, $3.75/1M prompt cache write)."
+    },
+    {
+      "id": "3d83eac1-fc3c-4bca-b7a6-43542c127320",
+      "provider": "anthropic",
+      "model": "claude-3-5-sonnet-20240620",
+      "input_price": "3.00",
+      "output_price": "15.00",
+      "cache_read_price": "0.30",
+      "cache_creation_price": "3.75",
+      "effective_from": "2024-06-20T00:00:00.000Z",
+      "effective_until": null,
+      "source": "sample-reference:anthropic:claude-3-5-sonnet-20240620:2024-06-20",
+      "description": "Anthropic official list pricing for Claude 3.5 Sonnet ($3.00/1M input, $15.00/1M output, $0.30/1M prompt cache read, $3.75/1M prompt cache write)."
+    },
+    {
+      "id": "a6ea2245-ceb9-43f6-8466-32ad203323ae",
+      "provider": "anthropic",
+      "model": "claude-3-opus-20240229",
+      "input_price": "15.00",
+      "output_price": "75.00",
+      "cache_read_price": "1.50",
+      "cache_creation_price": "18.75",
+      "effective_from": "2024-02-29T00:00:00.000Z",
+      "effective_until": null,
+      "source": "sample-reference:anthropic:claude-3-opus-20240229:2024-02-29",
+      "description": "Anthropic official list pricing for Claude 3 Opus ($15.00/1M input, $75.00/1M output, $1.50/1M prompt cache read, $18.75/1M prompt cache write)."
+    }
+  ]
+}

@@ -2,14 +2,15 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { MonitoringService } from '../core/monitoring/monitoring-service';
 import { InMemoryPricingCatalog } from '../core/pricing';
 import { ingestUsageEvents } from '../core/usage/ingestion';
+import { loadPricingFixtures } from './load-pricing-fixtures';
 import {
   buildDemoDataset,
   demoMonitoringConfigId,
   DEMO_DATASET_DAYS,
-  DEMO_DATASET_END,
   DEMO_ORGANIZATION_ID,
   DEMO_SEED_KEY,
   assertDemoOwnedRows,
+  getDefaultDatasetEnd,
   pricingRecordFromRow,
   resolveDemoTarget,
   runCleanupSteps
@@ -18,7 +19,7 @@ import {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const seedValue = Number(process.env.DEMO_SEED ?? '12345');
-const end = new Date(process.env.DEMO_DATASET_END ?? DEMO_DATASET_END);
+const end = process.env.DEMO_DATASET_END ? new Date(process.env.DEMO_DATASET_END) : getDefaultDatasetEnd();
 const days = Number(process.env.DEMO_DATASET_DAYS ?? DEMO_DATASET_DAYS);
 
 function requireConfiguration() {
@@ -92,14 +93,28 @@ async function upsertInBatches<T extends object>(
   }
 }
 
-async function seed() {
+export async function seedDemoData() {
   requireConfiguration();
   const supabase = createClient(supabaseUrl!, supabaseKey!);
-  const { data: pricingRows, error: pricingError } = await supabase
+  const { data: initialPricing, error: pricingError } = await supabase
     .from('pricing_catalog')
     .select('id, provider, model, input_price, output_price, cache_read_price, cache_creation_price, effective_from, effective_until, source')
     .in('provider', ['openai', 'anthropic']);
   if (pricingError) throw new Error(`Could not load the existing pricing catalog: ${pricingError.message}`);
+
+  let pricingRows = initialPricing;
+
+  if (!pricingRows || pricingRows.length === 0) {
+    console.log('Pricing catalog is empty. Automatically loading reviewed reference pricing fixtures...');
+    await loadPricingFixtures(supabase);
+    const reload = await supabase
+      .from('pricing_catalog')
+      .select('id, provider, model, input_price, output_price, cache_read_price, cache_creation_price, effective_from, effective_until, source')
+      .in('provider', ['openai', 'anthropic']);
+    if (reload.error) throw new Error(`Could not reload pricing catalog after loading fixtures: ${reload.error.message}`);
+    pricingRows = reload.data;
+  }
+
   const pricingRecords = (pricingRows || []).map(row => pricingRecordFromRow(row));
   if (!pricingRecords.length) throw new Error('The pricing catalog has no OpenAI or Anthropic records; add catalog records before seeding.');
 
@@ -169,7 +184,9 @@ async function seed() {
   }
 }
 
-seed().catch(error => {
-  console.error(`Demo seed failed: ${error instanceof Error ? error.message : String(error)}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  seedDemoData().catch(error => {
+    console.error(`Demo seed failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  });
+}

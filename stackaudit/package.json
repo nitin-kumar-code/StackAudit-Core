@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run --exclude **/integration.test.ts",
@@ -12,9 +12,12 @@
     "test:unit": "vitest run --exclude **/integration.test.ts",
     "test:integration": "vitest run app/api/v1/usage/integration.test.ts core/audit/__tests__/integration.test.ts core/monitoring/__tests__/integration.test.ts core/outcomes/__tests__/integration.test.ts core/workloads/__tests__/integration.test.ts",
     "typecheck": "tsc --noEmit",
+    "pricing:load": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/load-pricing-fixtures.ts",
     "seed": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/seed-demo-data.ts",
     "seed:demo": "npm run seed",
-    "seed:reset": "npm run seed"
+    "seed:reset": "npm run seed",
+    "db:migrate": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/migrate.ts",
+    "setup": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/setup.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -54,5 +57,6 @@
     "typescript": "^5",
     "vite": "^8.0.11",
     "vitest": "^4.1.5"
-  }
+  },
+  "license": "Apache-2.0"
 }

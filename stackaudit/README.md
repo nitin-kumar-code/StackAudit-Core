@@ -4,45 +4,145 @@ StackAudit is a self-hostable AI cost intelligence dashboard. It ingests provide
 
 This repository is an early preview. The current app includes OpenAI and Anthropic normalizers, CSV and API ingestion paths, a Supabase-backed pricing and usage pipeline, workload attribution, outcomes, audit rules, monitoring, alerts, and dashboard APIs. Authentication and organization setup are still early-stage; review [Security](SECURITY.md) before using it with sensitive or shared data.
 
-## Local development
+## First-Run Quickstart
 
-Requirements: Node.js 20+, npm, and the [Supabase CLI](https://supabase.com/docs/guides/cli).
+Follow this sequence to set up a clean local installation from scratch.
+
+### Prerequisites
+
+- **Node.js**: version 20+ and **npm**
+- **Docker**: Docker Desktop (or running Docker daemon)
+- **Supabase CLI**: installed globally (`npm install -g supabase` or `brew install supabase/tap/supabase`)
+
+> [!NOTE]
+> All commands should be run from inside the `stackaudit/` directory.
+
+### 1. Install dependencies
 
 ```sh
+cd stackaudit
 npm ci
+```
+
+### 2. Configure environment
+
+Copy the sample environment file:
+
+```sh
 cp .env.example .env.local
+```
+
+### 3. Start local Supabase
+
+```sh
 supabase start
 ```
 
-Set `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` to the local values printed by `supabase status`. Apply migrations with `supabase db reset`, then seed the demo data and start the app:
+Retrieve the local credentials by running `supabase status`. Update `.env.local`:
+
+```ini
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key from supabase status>
+SUPABASE_SERVICE_ROLE_KEY=<service_role key from supabase status>
+DEMO_ORG_ID=8a775c7f-e31c-8f9b-9000-000000000001
+```
+
+### 4. Apply migrations
+
+Initialize the database schema from the 14 migrations in `supabase/migrations/`:
+
+```sh
+supabase db reset
+```
+
+*(Alternatively, if `DATABASE_URL` is set, you can run `npm run db:migrate`).*
+
+### 5. Load reviewed pricing fixtures
+
+Populate the `pricing_catalog` with reviewed reference prices for OpenAI and Anthropic models:
+
+```sh
+npm run pricing:load
+```
+
+This loads versioned reference pricing (`fixtures/pricing/reference-pricing-v1.json`) covering input, output, and cached token rates with effective dating. Loading is idempotent and will never overwrite manually maintained production pricing.
+
+### 6. Seed demo dataset
+
+Seed 90 days of deterministic usage, workloads, attribution rules, and outcomes:
 
 ```sh
 npm run seed
+```
+
+*(Note: `npm run seed` will also automatically load pricing fixtures if the catalog is empty).*
+
+The seeder runs the application's actual audit and monitoring engine on the seeded data, creating findings and alerts.
+
+#### All-in-one shortcut
+
+After starting Supabase and applying migrations, you can run steps 5 and 6 together:
+
+```sh
+npm run setup
+```
+
+### 7. Start the application
+
+```sh
 npm run dev
 ```
 
-The seed command uses `DEMO_ORG_ID` from `.env.local` for the development-only API fallback. The demo organization is identified by a dedicated `demo_seed_key` marker added by the migrations. If the fixed ID already belongs to an unmarked organization, seeding stops before cleanup. Cleanup touches only records inside that marked demo organization. Keep the service-role key out of client-side code.
+### 8. Open the dashboard
+
+Visit [http://localhost:3000](http://localhost:3000) in your browser. The dashboard will display live spend KPIs, workload allocations, cost trends, cost-per-outcome metrics, and active monitoring alerts.
+
+---
 
 ### Reproducible demo data
 
-`DEMO_SEED`, `DEMO_DATASET_DAYS`, and `DEMO_DATASET_END` define the scenario. The end is an exclusive UTC timestamp, so the demo covers `[end - days, end)`. Reusing the same values recreates the same logical event IDs, references, timestamps, request/token counts, and outcomes. Pricing is read from the database `pricing_catalog`; the seeder refuses to write if it cannot price the generated scenario. No provider API is called.
+`DEMO_SEED`, `DEMO_DATASET_DAYS`, and `DEMO_DATASET_END` define the scenario:
+- `DEMO_SEED` (default `12345`): seed for the pseudo-random generation.
+- `DEMO_DATASET_DAYS` (default `90`): number of days of history to generate.
+- `DEMO_DATASET_END` (optional): exclusive UTC timestamp for the end of the range. If left unset, it defaults to the current day's UTC midnight so the recent 14-day monitoring window and dashboard filters (Last 24h, Last 7d, Last 30d, Last 90d) immediately display recent traffic and active alerts. To replay a fixed historical scenario deterministically, specify an ISO timestamp (e.g. `2026-10-17T00:00:00.000Z`).
 
-`npm run seed` and `npm run seed:demo` replace the dedicated demo dataset. `npm run seed:reset` is the same safe reset-and-seed operation. A failed write triggers cleanup of that marked demo dataset, so a partially seeded scenario is not left behind. The pricing catalog and all unmarked organizations are not changed.
+`npm run seed` and `npm run seed:demo` replace the dedicated demo dataset. `npm run seed:reset` is the same safe reset-and-seed operation. Cleanup affects only the organization marked with `demo_seed_key: stackaudit-demo-v1`. Non-demo organizations and manual pricing records are untouched.
 
-Remote databases are refused by default. Avoid production entirely. If a remote, disposable demo database is deliberately required, set `DEMO_SEED_ALLOW_REMOTE=true` and set `DEMO_SEED_EXPECTED_REMOTE_HOST` to the exact hostname in `NEXT_PUBLIC_SUPABASE_URL`; the dedicated demo ownership marker is still required. Never set these values in a production environment.
+Remote databases are refused by default. If a remote, disposable database is deliberately required, set `DEMO_SEED_ALLOW_REMOTE=true` and set `DEMO_SEED_EXPECTED_REMOTE_HOST` to the exact hostname in `NEXT_PUBLIC_SUPABASE_URL`.
 
-For deterministic reproduction, keep the seed, day count, exclusive end timestamp, and pricing catalog unchanged. To have the existing monitoring engine evaluate the recent 14-day scenario, set the end timestamp to the current UTC midnight before running the seed.
+---
+
+## Troubleshooting
+
+- **`The pricing catalog has no OpenAI or Anthropic records`**:
+  Run `npm run pricing:load` to populate the reference pricing catalog from fixtures.
+- **`relation "organizations" does not exist`**:
+  Migrations have not been applied. Run `supabase db reset` to apply the migrations.
+- **`Missing Authorization header` or empty dashboard**:
+  Ensure `DEMO_ORG_ID` in `.env.local` is set to `8a775c7f-e31c-8f9b-9000-000000000001` (matching the seeded demo organization ID).
+- **`Docker API connect error`**:
+  Ensure Docker Desktop is open and the Docker daemon is running before executing `supabase start`.
+- **`Last 7 Days shows $0.00 on dashboard`**:
+  If `DEMO_DATASET_END` is set in `.env.local` to a date in the past, usage events will not fall within the last 7 days. Comment out `DEMO_DATASET_END` in `.env.local` and re-run `npm run seed` to end the dataset at today's UTC midnight.
+- **`Refusing cleanup: organization ... is not marked as the StackAudit demo dataset`**:
+  The demo seeder refuses to delete data from an organization unless it has the explicit `demo_seed_key: stackaudit-demo-v1` marker. Use a clean database or ensure you are using the configured demo organization ID.
+
+---
 
 ## Commands
 
 ```sh
-npm run typecheck
-npm run lint
-npm test                 # unit tests; excludes database integration tests
-npm run test:integration # database integration tests; requires Docker, Supabase CLI, and a local service-role key
-npm run build
-npm run seed
-npm run seed:reset
+npm run typecheck         # Typecheck TypeScript files
+npm run lint              # Run ESLint checks
+npm test                  # Unit tests (excludes Supabase integration tests)
+npm run test:integration  # Database integration tests (requires local Supabase stack)
+npm run build             # Build production Next.js bundle
+npm run pricing:load      # Load reviewed reference pricing fixtures
+npm run seed              # Seed demo dataset (workloads, usage, outcomes, alerts)
+npm run seed:reset        # Reset and re-seed demo dataset
+npm run setup             # Full setup: verify schema, load pricing fixtures, seed demo
+npm run db:migrate        # Inspect and run database migrations
+npm run dev               # Start Next.js development server
 ```
 
 ## Analytics query contracts
@@ -79,4 +179,4 @@ Use only data you are authorized to process. Do not expose the Supabase service-
 
 ## License
 
-No license is currently included. Until the project owner selects and adds a license, users should not assume they have permission to redistribute or modify this code. See the license decision noted in `AUDIT_REPORT.md`.
+StackAudit is licensed under the Apache License, Version 2.0. See the root [`LICENSE`](LICENSE) file for the complete license text. The license applies to contributions incorporated into StackAudit as described in Section 5 of that license. Third-party components and assets may be subject to their own terms; see their applicable notices and documentation.
