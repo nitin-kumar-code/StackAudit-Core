@@ -1,0 +1,3 @@
+provider,model,timestamp,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,request_count,api_key_id,provider_reference
+openai,gpt-4o-mini,2026-10-01T12:00:00Z,1200,300,100,0,1,sk-proj-example,example-openai-usage-001
+anthropic,claude-sonnet-4-5,2026-10-01T12:15:00Z,800,250,0,120,1,sk-ant-example,example-anthropic-usage-001

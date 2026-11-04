@@ -18,6 +18,6 @@ Describe the problem, the behavior change, and verification performed. Include m
 
 Please follow the private reporting guidance in [SECURITY.md](SECURITY.md) for suspected vulnerabilities. Do not file exploitable details in a public issue.
 
-## License status
+## License and contributions
 
-The repository has not selected a license yet. Contributions are welcome for discussion, but the project owner must resolve licensing before public reuse or distribution terms can be represented as settled.
+StackAudit is licensed under the Apache License, Version 2.0. See the root [`LICENSE`](LICENSE) file. Under Section 5 of Apache-2.0, contributions intentionally submitted for inclusion are licensed under Apache-2.0 unless a contributor explicitly states otherwise; separate license agreements, if any, remain unaffected. Contributors retain their copyright in their contributions. Please identify third-party code or assets and their applicable license or attribution requirements when proposing them; do not submit material you are not authorized to contribute.

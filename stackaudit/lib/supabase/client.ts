@@ -1,8 +1,18 @@
+import 'server-only';
 import { createClient } from '@supabase/supabase-js';
+import { validateDatabaseTarget } from './database-target';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+function getDatabaseConfig() {
+  const mode = process.env.STACKAUDIT_DATABASE_MODE;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// A server-side only client with service role or anon key.
-// Ensure this is NEVER imported in client components!
+  validateDatabaseTarget(mode, supabaseUrl);
+  if (!supabaseKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required on the server.');
+
+  return { supabaseUrl, supabaseKey };
+}
+
+const { supabaseUrl, supabaseKey } = getDatabaseConfig();
+// Server-only privileged client. Never import this module from client components.
 export const supabaseAdmin = createClient(supabaseUrl, supabaseKey);

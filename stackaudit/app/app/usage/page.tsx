@@ -28,6 +28,24 @@ function UsageContent() {
   const [filterOptions, setFilterOptions] = useState<{ providers: string[]; models: string[]; workloads: WorkloadOption[] }>({ providers: [], models: [], workloads: [] });
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState('');
+  const [importErrors, setImportErrors] = useState<Array<{ row: number; message: string }>>([]);
+
+  async function importCsv(file?: File) {
+    if (!file) return;
+    setImporting(true); setImportMessage(''); setImportErrors([]);
+    try {
+      const form = new FormData(); form.append('file', file);
+      const response = await fetch('/api/v1/usage/import', { method: 'POST', body: form });
+      const result = await response.json();
+      if (!response.ok && response.status !== 207) throw new Error(result.error || 'CSV import failed.');
+      setImportMessage(`${result.message} ${result.accepted} accepted/imported, ${result.rejected} rejected, ${result.duplicates} duplicates skipped.`);
+      setImportErrors(result.errors || []);
+      if (result.imported > 0) router.refresh();
+    } catch (error) { setImportMessage(error instanceof Error ? error.message : 'CSV import failed.'); }
+    finally { setImporting(false); }
+  }
 
   // Filters from URL
   const range = searchParams.get('range') || '90d';
@@ -139,6 +157,31 @@ function UsageContent() {
         </div>
       </div>
 
+      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">Import usage CSV</h2>
+          <p className="mt-1 text-sm text-gray-500">CSV import is the supported V0 ingestion workflow. No provider credentials are stored or sent by this screen.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <a className="text-sm font-medium text-blue-700 underline" href="/samples/stackaudit-usage.csv" download>Download sample CSV</a>
+          <label className="text-sm text-gray-600">Choose a CSV file
+            <input className="ml-2 text-sm" type="file" accept=".csv,text/csv" disabled={importing} onChange={event => { void importCsv(event.target.files?.[0]); event.target.value = ''; }} />
+          </label>
+          {importing && <span className="text-sm text-gray-500">Validating and importing…</span>}
+        </div>
+        <p className="text-xs text-gray-500">Required columns: provider, model, timestamp, input_tokens, output_tokens, provider_reference. Optional: cache_read_tokens, cache_creation_tokens, request_count, api_key_id. Maximum 5 MB and 10,000 rows. Include api_key_id to apply a matching workload attribution rule.</p>
+        {importMessage && <div role="status" className="text-sm text-gray-800">{importMessage}</div>}
+        {importErrors.length > 0 && <div className="max-h-40 overflow-auto rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" aria-label="CSV row errors">
+          {importErrors.map((error, index) => <div key={`${error.row}-${index}`}>Row {error.row}: {error.message}</div>)}
+        </div>}
+        <div className="grid gap-2 border-t border-gray-100 pt-3 text-xs text-gray-600 sm:grid-cols-2">
+          <p><strong>Provider connections:</strong> none are supported in the UI.</p>
+          <p><strong>CSV import:</strong> supported for canonical usage rows.</p>
+          <p><strong>Library primitives:</strong> OpenAI and Anthropic adapters exist but are not connected ingestion flows.</p>
+          <p><strong>Planned integrations:</strong> none are promised for this V0.</p>
+        </div>
+      </section>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm flex flex-col justify-center">
@@ -224,7 +267,9 @@ function UsageContent() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <span className={`text-sm font-mono ${isAnomaly ? 'text-rose-600 font-medium bg-rose-50 px-2 py-1 rounded-md' : 'text-gray-900'}`}>
-                          {e.is_unpriced ? 'Unpriced' : formatCurrency(parseFloat(e.calculated_cost ?? '0'))}
+                          {e.is_unpriced
+                            ? <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 font-sans text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200" title="No matching price was found; zero is a placeholder, not the event cost.">Unpriced</span>
+                            : formatCurrency(parseFloat(e.calculated_cost ?? '0'))}
                         </span>
                       </td>
                     </tr>

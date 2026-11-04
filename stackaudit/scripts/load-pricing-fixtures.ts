@@ -177,11 +177,14 @@ export async function loadPricingFixtures(
 }
 
 async function runCli() {
+  if (process.env.STACKAUDIT_DATABASE_MODE !== 'local') throw new Error('Pricing fixture loading requires STACKAUDIT_DATABASE_MODE=local.');
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required in .env.local');
   if (!supabaseKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required in .env.local');
+  const host = new URL(supabaseUrl).hostname;
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) throw new Error('Pricing fixture loading requires a localhost Supabase URL.');
 
   console.log('Loading reviewed reference pricing fixtures...');
   const supabase = createClient(supabaseUrl, supabaseKey);

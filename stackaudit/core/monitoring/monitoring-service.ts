@@ -32,7 +32,7 @@ export class MonitoringService {
   /** Run monitoring for a single org. Returns the monitoring_run ID. */
   async runMonitoring(organizationId: string): Promise<string> {
     // Reap stale runs first
-    await this.reapStaleRuns();
+    await this.reapStaleRuns(organizationId);
 
     const startedAt = new Date();
 
@@ -78,72 +78,6 @@ export class MonitoringService {
       .eq('id', runId);
 
     return runId;
-  }
-
-  /** Run monitoring for ALL orgs (cron path). Creates one run per org. Returns run IDs. */
-  async runMonitoringAllOrgs(): Promise<string[]> {
-    await this.reapStaleRuns();
-
-    const { data: configs, error: configError } = await this.supabase
-      .from('monitoring_configs')
-      .select('*')
-      .eq('enabled', true);
-
-    if (configError) throw new Error(`Failed to load configs: ${configError.message}`);
-    if (!configs || configs.length === 0) return [];
-
-    // Group configs by org
-    const byOrg = new Map<string, MonitoringConfigRow[]>();
-    for (const c of configs) {
-      const orgId = c.organization_id;
-      if (!byOrg.has(orgId)) byOrg.set(orgId, []);
-      byOrg.get(orgId)!.push(c);
-    }
-
-    const runIds: string[] = [];
-
-    for (const [orgId, orgConfigs] of byOrg) {
-      const startedAt = new Date();
-
-      const { data: run, error: runError } = await this.supabase
-        .from('monitoring_runs')
-        .insert({
-          organization_id: orgId,
-          started_at: startedAt.toISOString(),
-          status: 'RUNNING' as MonitoringRunStatus
-        })
-        .select('id')
-        .single();
-
-      if (runError) {
-        console.error(`Failed to create run for org ${orgId}: ${runError.message}`);
-        continue;
-      }
-
-      const { evaluatedWorkloads, findingsCount, alertsCount, errors } =
-        await this.evaluateConfigs(orgConfigs);
-
-      const finalStatus: MonitoringRunStatus =
-        errors.length > 0
-          ? (evaluatedWorkloads > 0 ? 'COMPLETED_WITH_ERRORS' : 'FAILED')
-          : 'COMPLETED';
-
-      await this.supabase
-        .from('monitoring_runs')
-        .update({
-          completed_at: new Date().toISOString(),
-          status: finalStatus,
-          evaluated_workloads: evaluatedWorkloads,
-          findings_count: findingsCount,
-          alerts_count: alertsCount,
-          error_info: errors.length > 0 ? errors.join('\n') : null
-        })
-        .eq('id', run.id);
-
-      runIds.push(run.id);
-    }
-
-    return runIds;
   }
 
   private async evaluateConfigs(rawConfigs: MonitoringConfigRow[]): Promise<{
@@ -217,7 +151,7 @@ export class MonitoringService {
   }
 
   /** D6: Mark runs stuck in RUNNING for >1 hour as TIMED_OUT */
-  private async reapStaleRuns(): Promise<void> {
+  private async reapStaleRuns(organizationId: string): Promise<void> {
     const cutoff = new Date(Date.now() - STALE_RUN_TIMEOUT_MS).toISOString();
 
     await this.supabase
@@ -227,6 +161,7 @@ export class MonitoringService {
         completed_at: new Date().toISOString(),
         error_info: 'Run exceeded 1 hour timeout and was reaped'
       })
+      .eq('organization_id', organizationId)
       .eq('status', 'RUNNING')
       .lt('started_at', cutoff);
   }

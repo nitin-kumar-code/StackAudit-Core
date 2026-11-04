@@ -1,22 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 import { LayoutDashboard, Server, Activity, Target, ShieldAlert, Settings, Bell } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-
-  useEffect(() => {
-    // Quick probe to check if the user has an org set up.
-    // If Dashboard summary throws a 403, we redirect to onboarding.
-    fetch('/api/v1/dashboard/summary?start=2024-01-01&end=2024-12-31')
-      .then(res => {
-        if (res.status === 403) router.push('/onboarding');
-      })
-      .catch(() => {});
-  }, [router]);
   return (
     <div className="flex h-screen bg-background text-base">
       {/* Sidebar */}

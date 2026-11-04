@@ -23,16 +23,14 @@ const end = process.env.DEMO_DATASET_END ? new Date(process.env.DEMO_DATASET_END
 const days = Number(process.env.DEMO_DATASET_DAYS ?? DEMO_DATASET_DAYS);
 
 function requireConfiguration() {
+  if (process.env.STACKAUDIT_DATABASE_MODE !== 'local') throw new Error('Demo seeding requires STACKAUDIT_DATABASE_MODE=local.');
+  if (!process.env.STACKAUDIT_WORKSPACE_ORG_ID) throw new Error('STACKAUDIT_WORKSPACE_ORG_ID is required; refusing to seed an implicit workspace.');
+  if (process.env.STACKAUDIT_WORKSPACE_ORG_ID !== DEMO_ORGANIZATION_ID) throw new Error('The demo dataset organization must match STACKAUDIT_WORKSPACE_ORG_ID.');
+  const dbHost = supabaseUrl ? new URL(supabaseUrl).hostname : '';
+  if (!['localhost', '127.0.0.1', '::1'].includes(dbHost)) throw new Error('Demo seeding requires a localhost Supabase URL.');
   if (!supabaseUrl) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required; refusing to seed an unidentified database.');
   if (!supabaseKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required. Set it in .env.local before seeding.');
-  const target = resolveDemoTarget(
-    supabaseUrl,
-    process.env.DEMO_SEED_ALLOW_REMOTE === 'true',
-    process.env.DEMO_SEED_EXPECTED_REMOTE_HOST
-  );
-  if (target === 'remote') {
-    console.warn('Remote demo seeding explicitly enabled for the hostname-pinned target.');
-  }
+  resolveDemoTarget(supabaseUrl, false);
 }
 
 async function assertDemoOrganization(supabase: SupabaseClient) {
@@ -165,7 +163,7 @@ export async function seedDemoData() {
 
     console.log(`Seeded ${dataset.usageEvents.length} priced usage events and ${dataset.outcomeEvents.length} outcomes.`);
     console.log(`Dataset window: [${dataset.start.toISOString()}, ${dataset.end.toISOString()}); seed ${seedValue}.`);
-    console.log(`Demo organization: ${DEMO_ORGANIZATION_ID}. Set DEMO_ORG_ID to this value in .env.local for the local development fallback.`);
+    console.log(`Demo organization: ${DEMO_ORGANIZATION_ID}. Set STACKAUDIT_WORKSPACE_ORG_ID to this value in .env.local.`);
     console.log('Running the existing audit and monitoring pipeline...');
     const runId = await new MonitoringService(supabase).runMonitoring(DEMO_ORGANIZATION_ID);
     const { data: run, error: runError } = await supabase.from('monitoring_runs').select('status, findings_count, alerts_count').eq('id', runId).single();

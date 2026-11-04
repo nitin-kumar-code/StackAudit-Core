@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../../lib/supabase/client';
 import { MonitoringService } from '../../../../../../core/monitoring/monitoring-service';
+import { ConfigurationError, getValidatedWorkspaceId } from '../../../../../../lib/auth';
 
 const monitoringService = new MonitoringService(supabaseAdmin);
 
 /**
  * Internal cron endpoint. Authenticated by CRON_SECRET header, NOT a user JWT.
- * Runs monitoring across ALL enabled configs (all orgs).
+ * Runs monitoring for the explicitly configured local workspace.
  *
  * Example cron invocation:
  *   curl -X POST https://your-domain/api/v1/internal/monitoring/run \
@@ -27,16 +28,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Cron path: run across ALL orgs
-    const runIds = await monitoringService.runMonitoringAllOrgs();
+    const workspaceId = await getValidatedWorkspaceId();
+    const runId = await monitoringService.runMonitoring(workspaceId);
+    const runIds = [runId];
 
     const { data: runs } = await supabaseAdmin
       .from('monitoring_runs')
       .select('*')
+      .eq('organization_id', workspaceId)
       .in('id', runIds);
 
     return NextResponse.json({ runs: runs || [], count: runIds.length }, { status: 200 });
   } catch (error: unknown) {
+    if (error instanceof ConfigurationError) return NextResponse.json({ error: error.message }, { status: 503 });
     console.error('Internal Monitoring Run Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

@@ -30,17 +30,23 @@ export async function runSetup(): Promise<void> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  if (process.env.STACKAUDIT_DATABASE_MODE !== 'local') throw new Error('First-run setup requires STACKAUDIT_DATABASE_MODE=local.');
+
   if (!supabaseUrl || !supabaseKey) {
     console.error('✗ Missing database credentials in .env.local.\n');
     console.log('To set up local Supabase:');
     console.log('  1. Run: supabase start');
     console.log('  2. Copy the API URL and service_role key printed by supabase status into .env.local:');
     console.log('     NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321');
+    console.log('     STACKAUDIT_DATABASE_MODE=local');
     console.log('     SUPABASE_SERVICE_ROLE_KEY=<service_role key>');
+    console.log('     STACKAUDIT_WORKSPACE_ORG_ID=8a775c7f-e31c-8f9b-9000-000000000001');
     console.log('  3. Run: supabase db reset');
     console.log('  4. Run: npm run setup\n');
     throw new Error('Supabase credentials not configured.');
   }
+  const host = new URL(supabaseUrl).hostname;
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) throw new Error('First-run setup requires a localhost Supabase URL.');
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -48,8 +54,7 @@ export async function runSetup(): Promise<void> {
   console.log('1. Checking database connection and schema...');
   const { error: testError } = await supabase
     .from('organizations')
-    .select('id')
-    .limit(1);
+    .select('id', { count: 'exact', head: true });
 
   if (testError) {
     if (testError.message.includes('relation "organizations" does not exist') || testError.code === '42P01') {

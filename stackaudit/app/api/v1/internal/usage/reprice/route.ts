@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../../lib/supabase/client';
 import { repriceUnpricedEvents } from '../../../../../../core/usage/repricing';
 import { InMemoryPricingCatalog } from '../../../../../../core/pricing/catalog';
+import { ConfigurationError, getValidatedWorkspaceId } from '../../../../../../lib/auth';
 
 /**
  * Internal cron endpoint to trigger repricing of unpriced events.
@@ -38,33 +39,36 @@ export async function POST(req: Request) {
     
     const catalog = new InMemoryPricingCatalog(records);
 
-    // Get all distinct orgs that have unpriced events
+    // Inspect only the configured workspace; never enumerate organizations.
+    const workspaceId = await getValidatedWorkspaceId();
     const { data: orgs } = await supabaseAdmin
       .from('usage_events')
       .select('organization_id')
+      .eq('organization_id', workspaceId)
       .eq('is_unpriced', true);
       
-    const uniqueOrgs = Array.from(new Set((orgs || []).map((o) => o.organization_id)));
+    const hasUnpricedEvents = (orgs || []).length > 0;
     
     let totalAttempted = 0;
     let totalSuccessful = 0;
     let totalStillUnpriced = 0;
 
     // Reprice per org
-    for (const orgId of uniqueOrgs) {
-      const result = await repriceUnpricedEvents(orgId, catalog, supabaseAdmin);
+    if (hasUnpricedEvents) {
+      const result = await repriceUnpricedEvents(workspaceId, catalog, supabaseAdmin);
       totalAttempted += result.totalAttempted;
       totalSuccessful += result.successful;
       totalStillUnpriced += result.stillUnpriced;
     }
 
     return NextResponse.json({ 
-      processedOrgs: uniqueOrgs.length,
+      processedOrgs: hasUnpricedEvents ? 1 : 0,
       totalAttempted,
       totalSuccessful,
       totalStillUnpriced
     }, { status: 200 });
   } catch (error: unknown) {
+    if (error instanceof ConfigurationError) return NextResponse.json({ error: error.message }, { status: 503 });
     console.error('Repricing Cron Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

@@ -2,7 +2,7 @@
 
 StackAudit is a self-hostable AI cost intelligence dashboard. It ingests provider usage records, applies effective-dated pricing, attributes usage to workloads, records business outcomes, and exposes cost, audit, and monitoring views.
 
-This repository is an early preview. The current app includes OpenAI and Anthropic normalizers, CSV and API ingestion paths, a Supabase-backed pricing and usage pipeline, workload attribution, outcomes, audit rules, monitoring, alerts, and dashboard APIs. Authentication and organization setup are still early-stage; review [Security](SECURITY.md) before using it with sensitive or shared data.
+StackAudit V0 is a **single-user, locally self-hosted preview** for one operator or developer. It is not hardened for shared production hosting or multi-tenant use. Review [Security](SECURITY.md) before use.
 
 ## First-Run Quickstart
 
@@ -42,10 +42,12 @@ Retrieve the local credentials by running `supabase status`. Update `.env.local`
 
 ```ini
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key from supabase status>
+STACKAUDIT_DATABASE_MODE=local
 SUPABASE_SERVICE_ROLE_KEY=<service_role key from supabase status>
-DEMO_ORG_ID=8a775c7f-e31c-8f9b-9000-000000000001
+STACKAUDIT_WORKSPACE_ORG_ID=8a775c7f-e31c-8f9b-9000-000000000001
 ```
+
+`STACKAUDIT_DATABASE_MODE=local` is required and accepts only a localhost Supabase URL. `STACKAUDIT_WORKSPACE_ORG_ID` explicitly selects the active workspace; the server verifies that it exists and never chooses another organization. Keep the service-role key in `.env.local` on the server. Do not prefix it with `NEXT_PUBLIC_` or put it in browser code.
 
 ### 4. Apply migrations
 
@@ -108,7 +110,13 @@ Visit [http://localhost:3000](http://localhost:3000) in your browser. The dashbo
 
 `npm run seed` and `npm run seed:demo` replace the dedicated demo dataset. `npm run seed:reset` is the same safe reset-and-seed operation. Cleanup affects only the organization marked with `demo_seed_key: stackaudit-demo-v1`. Non-demo organizations and manual pricing records are untouched.
 
-Remote databases are refused by default. If a remote, disposable database is deliberately required, set `DEMO_SEED_ALLOW_REMOTE=true` and set `DEMO_SEED_EXPECTED_REMOTE_HOST` to the exact hostname in `NEXT_PUBLIC_SUPABASE_URL`.
+The application refuses remote database targets unless `STACKAUDIT_DATABASE_MODE=remote` is explicitly set. Remote mode is a deliberate operator choice and does not make the deployment safe for shared users. Demo seeding remains localhost-only.
+
+### Import usage from CSV
+
+The Usage page is the supported V0 ingestion workflow. Download the sample CSV there (or from [`public/samples/stackaudit-usage.csv`](public/samples/stackaudit-usage.csv)), export usage from your provider console, map it to the canonical headers, then upload it. Required columns are `provider,model,timestamp,input_tokens,output_tokens,provider_reference`; optional columns are `cache_read_tokens,cache_creation_tokens,request_count,api_key_id`. Token counts must be non-negative integers, timestamps must be parseable, and provider references must be stable for deduplication. Include `api_key_id` to use an existing attribution rule. Imports show row errors, skipped duplicates, and rows without pricing. Upload limit: 5 MB / 10,000 rows.
+
+Provider adapters in `core/providers` are library primitives and are not connected provider integrations. StackAudit does not ask for or store provider API credentials in V0.
 
 ---
 
@@ -118,8 +126,8 @@ Remote databases are refused by default. If a remote, disposable database is del
   Run `npm run pricing:load` to populate the reference pricing catalog from fixtures.
 - **`relation "organizations" does not exist`**:
   Migrations have not been applied. Run `supabase db reset` to apply the migrations.
-- **`Missing Authorization header` or empty dashboard**:
-  Ensure `DEMO_ORG_ID` in `.env.local` is set to `8a775c7f-e31c-8f9b-9000-000000000001` (matching the seeded demo organization ID).
+- **Missing workspace configuration or empty dashboard**:
+  Ensure `STACKAUDIT_WORKSPACE_ORG_ID` in `.env.local` names an existing organization (the seeded demo ID is `8a775c7f-e31c-8f9b-9000-000000000001`).
 - **`Docker API connect error`**:
   Ensure Docker Desktop is open and the Docker daemon is running before executing `supabase start`.
 - **`Last 7 Days shows $0.00 on dashboard`**:
@@ -175,7 +183,7 @@ See subsystem READMEs under `core/` for contracts and behavior. Integration chec
 
 ## Data and privacy
 
-Use only data you are authorized to process. Do not expose the Supabase service-role key. The current service-role-backed API and development organization fallback are intended for local development and are not a hardened multi-tenant deployment. RLS and production identity/authorization policies are not complete.
+Use only data you are authorized to process. Do not expose the Supabase service-role key. StackAudit V0 is a single-user local preview, not a hardened multi-tenant deployment. See [Security](SECURITY.md) for credentials, access boundaries, and remaining limitations.
 
 ## License
 

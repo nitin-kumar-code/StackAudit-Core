@@ -1,63 +1,56 @@
+import 'server-only';
 import { supabaseAdmin } from './supabase/client';
 
 export class UnauthorizedError extends Error {
-  constructor(message = 'Unauthorized') {
-    super(message);
-    this.name = 'UnauthorizedError';
-  }
+  constructor(message = 'Unauthorized') { super(message); this.name = 'UnauthorizedError'; }
+}
+export class ForbiddenError extends Error {
+  constructor(message = 'Forbidden') { super(message); this.name = 'ForbiddenError'; }
+}
+export class ConfigurationError extends ForbiddenError {
+  constructor(message: string) { super(message); this.name = 'ConfigurationError'; }
 }
 
-export class ForbiddenError extends Error {
-  constructor(message = 'Forbidden') {
-    super(message);
-    this.name = 'ForbiddenError';
+export function getConfiguredWorkspaceId(): string {
+  const id = process.env.STACKAUDIT_WORKSPACE_ORG_ID;
+  if (!id) throw new ConfigurationError('STACKAUDIT_WORKSPACE_ORG_ID is required. Set it to the organization ID for this local workspace.');
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    throw new ConfigurationError('STACKAUDIT_WORKSPACE_ORG_ID must be a valid UUID.');
   }
+  return id;
+}
+
+export async function getValidatedWorkspaceId(): Promise<string> {
+  const id = getConfiguredWorkspaceId();
+  const { data: organization, error } = await supabaseAdmin
+    .from('organizations').select('id').eq('id', id).maybeSingle();
+  if (error || !organization) {
+    throw new ConfigurationError('The configured StackAudit workspace was not found. Run the local setup/seed flow or set STACKAUDIT_WORKSPACE_ORG_ID to an existing organization.');
+  }
+  return id;
 }
 
 export async function getAuthOrgId(req: Request): Promise<string> {
+  const orgId = await getValidatedWorkspaceId();
+
+  // In local preview, a supplied identity may authenticate only for the configured
+  // workspace. It can never select or switch the active workspace.
   const authHeader = req.headers.get('Authorization');
-  
-  if (!authHeader) {
-    // Fallback for local development demo
-    if (process.env.NODE_ENV === 'development') {
-      if (process.env.DEMO_ORG_ID) {
-        return process.env.DEMO_ORG_ID;
-      }
-      // If server wasn't restarted and env var is missing, fetch any org
-      const { data } = await supabaseAdmin.from('organizations').select('id').limit(1).single();
-      if (data?.id) return data.id;
-    }
-    throw new UnauthorizedError('Missing Authorization header');
-  }
-  
-  const token = authHeader.replace('Bearer ', '').trim();
-  
+  if (!authHeader) return orgId;
+  const token = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) throw new UnauthorizedError('Invalid Authorization header');
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) {
-    throw new UnauthorizedError('Invalid or expired token');
-  }
-  
-  // Use app_metadata (server-controlled) instead of user_metadata (client-controlled)
-  const orgId = user.app_metadata?.organization_id;
-  if (!orgId) {
-    throw new ForbiddenError('User does not belong to an organization');
-  }
-  
+  if (error || !user) throw new UnauthorizedError('Invalid or expired token');
+  const userOrgId = user.app_metadata?.organization_id;
+  if (!userOrgId || userOrgId !== orgId) throw new ForbiddenError('The authenticated identity is not assigned to the configured local workspace');
   return orgId;
 }
 
 export async function getAuthUser(req: Request) {
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    throw new UnauthorizedError('Missing Authorization header');
-  }
-  
-  const token = authHeader.replace('Bearer ', '').trim();
-  
+  const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) throw new UnauthorizedError('Missing or invalid Authorization header');
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) {
-    throw new UnauthorizedError('Invalid or expired token');
-  }
-  
+  if (error || !user) throw new UnauthorizedError('Invalid or expired token');
   return user;
 }

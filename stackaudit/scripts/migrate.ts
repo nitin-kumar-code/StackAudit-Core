@@ -16,6 +16,11 @@ export function listMigrations(): string[] {
 export function runMigrations(): void {
   console.log('=== StackAudit Database Migrations ===\n');
 
+  const mode = process.env.STACKAUDIT_DATABASE_MODE;
+  if (mode !== 'local' && mode !== 'remote') {
+    throw new Error('Set STACKAUDIT_DATABASE_MODE=local for local migrations, or explicitly set remote before targeting a remote database.');
+  }
+
   const files = listMigrations();
   console.log(`Found ${files.length} migration files in supabase/migrations:\n`);
   for (const file of files) {
@@ -26,6 +31,10 @@ export function runMigrations(): void {
   // Check if DATABASE_URL or POSTGRES_URL is provided for direct psql application
   const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (dbUrl) {
+    const host = new URL(dbUrl).hostname;
+    const isLocal = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(host);
+    if (mode === 'local' && !isLocal) throw new Error('Local mode refuses a remote DATABASE_URL. Explicitly set STACKAUDIT_DATABASE_MODE=remote to proceed.');
+    if (mode === 'remote' && isLocal) throw new Error('Remote mode requires a non-local DATABASE_URL.');
     console.log('Applying migrations to DATABASE_URL via psql...');
     const migrationsDir = path.resolve(__dirname, '../supabase/migrations');
     for (const file of files) {
@@ -37,7 +46,13 @@ export function runMigrations(): void {
     return;
   }
 
-  // Check if supabase CLI is available
+  // Supabase CLI can target a linked remote project; require explicit remote mode.
+  if (mode !== 'remote') {
+    console.log('No DATABASE_URL provided. For local Supabase, apply migrations with: supabase db reset');
+    return;
+  }
+
+  // Check if supabase CLI is available (remote use was explicitly selected above).
   try {
     execSync('supabase --version', { stdio: 'ignore' });
     console.log('Applying migrations via Supabase CLI (supabase db push)...');
