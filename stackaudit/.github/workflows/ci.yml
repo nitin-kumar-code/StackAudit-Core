@@ -1,69 +1,102 @@
 name: CI
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  application:
+    name: Application checks
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-    - name: Typecheck
-      run: npm run typecheck
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
-    - name: Lint
-      run: npm run lint
+      - name: Install locked dependencies
+        run: npm ci
 
-    - name: Run Unit Tests
-      run: npm run test:unit
+      - name: Typecheck
+        run: npm run typecheck
 
-    - name: Setup Supabase CLI
-      uses: supabase/setup-cli@v1
-      with:
-        version: 2.122.0
+      - name: Lint
+        run: npm run lint
 
-    - name: Start Supabase Local Stack
-      run: supabase start
+      - name: Unit tests
+        run: npm test
 
-    - name: Export disposable local Supabase credentials
-      run: |
-        SERVICE_ROLE_KEY="$(supabase status -o env | sed -n 's/^SERVICE_ROLE_KEY=//p' | tr -d '"')"
-        if [ -z "$SERVICE_ROLE_KEY" ]; then
-          echo "Could not read the local Supabase service-role key from the CLI."
-          exit 1
-        fi
-        echo "NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321" >> "$GITHUB_ENV"
-        echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
-      
-    - name: Reset local database and validate migrations
-      run: supabase db reset
+      - name: Production build
+        run: npm run build
 
-    - name: Run SQL analytics tests (pgTAP)
-      run: supabase test db
+  database:
+    name: Supabase migrations and integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
 
-    - name: Production build
-      run: npm run build
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
-    - name: Run Integration Tests
-      env:
-        NEXT_PUBLIC_SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
-        SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
-      run: |
-        if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-          echo "Error: SUPABASE_SERVICE_ROLE_KEY is required but missing in CI environment!"
-          exit 1
-        fi
-        npm run test:integration
+      - name: Install locked dependencies and Supabase CLI
+        run: npm ci
+
+      - name: Start disposable local Supabase
+        shell: bash
+        run: |
+          if ! npx supabase start --exclude studio,edge-runtime,logflare,vector,imgproxy,inbucket,supavisor > "$RUNNER_TEMP/supabase-start.log" 2>&1; then
+            sed -E \
+              -e 's/(service_role key:|SERVICE_ROLE_KEY=)[[:space:]]*[^[:space:]]+/\1[REDACTED]/Ig' \
+              -e 's/(anon key:|ANON_KEY=)[[:space:]]*[^[:space:]]+/\1[REDACTED]/Ig' \
+              "$RUNNER_TEMP/supabase-start.log" >&2
+            exit 1
+          fi
+
+      - name: Apply complete migration history to an empty database
+        run: npx supabase db reset
+
+      - name: Run SQL integration tests and RPC assertions
+        run: npx supabase test db
+
+      - name: Export local Supabase test credentials
+        shell: bash
+        run: |
+          npx supabase status -o env > "$RUNNER_TEMP/supabase-status.env"
+          api_url="$(sed -n 's/^API_URL=//p' "$RUNNER_TEMP/supabase-status.env" | tr -d '\"')"
+          service_role_key="$(sed -n 's/^SERVICE_ROLE_KEY=//p' "$RUNNER_TEMP/supabase-status.env" | tr -d '\"')"
+          if [[ -z "$api_url" || -z "$service_role_key" ]]; then
+            echo "Supabase CLI did not provide the local API URL and service-role key." >&2
+            exit 1
+          fi
+          echo "::add-mask::$service_role_key"
+          echo "NEXT_PUBLIC_SUPABASE_URL=$api_url" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$service_role_key" >> "$GITHUB_ENV"
+          echo "STACKAUDIT_DATABASE_MODE=local" >> "$GITHUB_ENV"
+          echo "STACKAUDIT_WORKSPACE_ORG_ID=8a775c7f-e31c-8f9b-9000-000000000001" >> "$GITHUB_ENV"
+
+      - name: Run database-backed application tests
+        run: npm run test:integration
+
+      - name: Stop disposable local Supabase
+        if: always()
+        run: npx supabase stop --no-backup

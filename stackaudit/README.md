@@ -10,7 +10,7 @@ Follow this sequence to set up a clean local installation from scratch.
 
 ### Prerequisites
 
-- **Node.js**: version 20+ and **npm**
+- **Node.js**: version 22.22.2+ and **npm** (the committed dependency lockfile includes packages requiring this runtime)
 - **Docker**: Docker Desktop (or running Docker daemon)
 - **Supabase CLI**: installed globally (`npm install -g supabase` or `brew install supabase/tap/supabase`)
 
@@ -51,11 +51,13 @@ STACKAUDIT_WORKSPACE_ORG_ID=8a775c7f-e31c-8f9b-9000-000000000001
 
 ### 4. Apply migrations
 
-Initialize the database schema from the 14 migrations in `supabase/migrations/`:
+Initialize the database schema from the migration history in `supabase/migrations/`:
 
 ```sh
 supabase db reset
 ```
+
+Fresh databases and upgrades use this ordered migration history. `full_setup.sql` is a retained legacy schema snapshot; it is not part of setup, is not applied by CI, and must not be used alongside migrations. Pricing and demo records are loaded separately by the fixture and seed commands below. See [Supabase migration guidance](supabase/README.md) for the source-of-truth policy.
 
 *(Alternatively, if `DATABASE_URL` is set, you can run `npm run db:migrate`).*
 
