@@ -1,6 +1,10 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT extensions.plan(19);
+SELECT extensions.plan(22);
+
+SELECT extensions.has_column('public', 'provider_sync_state', 'last_ingested_bucket_end', 'provider sync watermark column exists');
+SELECT extensions.has_column('public', 'alerts', 'notification_attempts', 'alert notification attempt counter exists');
+SELECT extensions.has_column('public', 'alerts', 'last_notification_error', 'alert notification error column exists');
 
 -- Isolated deterministic rows exercise actual PostgreSQL records and RPCs.
 INSERT INTO organizations (id, name) VALUES

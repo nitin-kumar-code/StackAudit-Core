@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../lib/supabase/client';
 import { getAuthOrgId, UnauthorizedError, ForbiddenError } from '../../../../../lib/auth';
 import { OutcomeService } from '../../../../../core/outcomes/service';
+import { ValidationError } from '../../../../../core/workloads/service';
 
 const outcomeService = new OutcomeService(supabaseAdmin);
 
@@ -40,6 +41,9 @@ export async function GET(req: Request) {
     }
     if (error instanceof ForbiddenError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     
     console.error('Analytics GET Error:', error);

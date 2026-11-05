@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../../../../lib/supabase/client';
 import { getAuthOrgId, UnauthorizedError, ForbiddenError } from '../../../../lib/auth';
 import { OutcomeService } from '../../../../core/outcomes/service';
 import { WorkloadNotFoundError, ValidationError } from '../../../../core/workloads/service';
+import { ConflictError } from '../../../../core/types';
 
 const outcomeService = new OutcomeService(supabaseAdmin);
 
@@ -43,6 +44,9 @@ export async function POST(req: Request) {
     if (error instanceof WorkloadNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
+    if (error instanceof ConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     
     console.error('Outcomes POST Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -68,6 +72,8 @@ export async function GET(req: Request) {
   } catch (error: unknown) {
     if (error instanceof UnauthorizedError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (error instanceof ForbiddenError) return NextResponse.json({ error: error.message }, { status: 403 });
+    if (error instanceof ValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error instanceof WorkloadNotFoundError) return NextResponse.json({ error: error.message }, { status: 404 });
     console.error('Outcomes GET Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

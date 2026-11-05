@@ -57,7 +57,7 @@ export default function AlertsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Active Alerts</h1>
         <button 
-          onClick={() => fetch('/api/v1/internal/monitoring/run', { method: 'POST' })}
+          onClick={() => fetch('/api/v1/monitoring/run', { method: 'POST' })}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm font-medium"
         >
           Run Monitoring
