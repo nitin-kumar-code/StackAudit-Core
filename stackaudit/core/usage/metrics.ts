@@ -63,13 +63,17 @@ export function aggregateUsageCosts(rows: UsageCostRow[]): UsageCostSummary {
 /** Calculate CPO only for a caller-defined matching workload/outcome scope. */
 export function calculateCostPerOutcome(
   costs: UsageCostSummary,
-  outcomeCount: number | null | undefined
+  outcomeCount: number | null | undefined,
+  outcomeTypeCount = 1
 ): { value: string | null; reason: string | null } {
   if (outcomeCount === null || outcomeCount === undefined || outcomeCount <= 0) {
     return { value: null, reason: 'No outcomes are recorded for this scope and time window.' };
   }
   if (!costs.isComplete || costs.totalCost === null) {
     return { value: null, reason: 'Cost per outcome is unavailable because usage pricing is incomplete.' };
+  }
+  if (outcomeTypeCount !== 1) {
+    return { value: null, reason: 'Cost per outcome is unavailable because this workload records multiple outcome types in the selected window.' };
   }
   return { value: new Big(costs.totalCost).div(outcomeCount).toString(), reason: null };
 }

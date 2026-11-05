@@ -8,6 +8,13 @@ export class CostDriftRule implements AuditRule {
   evaluate(context: AuditContext): Omit<AuditFinding, 'id' | 'detectedAt'> | null {
     const { currentMetrics, baselineMetrics, currentWindow, currentOutcomes, baselineOutcomes } = context;
 
+    // Check both windows for unpriced events!
+    if (currentMetrics.unpricedEvents > 0 || baselineMetrics.unpricedEvents > 0) {
+      throw new SkipError('Skipped: Window contains unpriced events, understating cost');
+    }
+    if (currentMetrics.totalCost === null || baselineMetrics.totalCost === null) {
+      throw new SkipError('Skipped: Known priced cost is unavailable');
+    }
     if (baselineMetrics.totalCost < AUDIT_THRESHOLDS.MIN_BASELINE_COST_USD) {
       throw new SkipError(`Skipped: Baseline cost below threshold ($${AUDIT_THRESHOLDS.MIN_BASELINE_COST_USD})`);
     }
@@ -16,10 +23,6 @@ export class CostDriftRule implements AuditRule {
     }
     if (currentMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE || baselineMetrics.requestCount < AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE) {
       throw new SkipError(`Skipped: Request volume below min sample size (${AUDIT_THRESHOLDS.MIN_SAMPLE_SIZE})`);
-    }
-    // Check both windows for unpriced events!
-    if (currentMetrics.unpricedEvents > 0 || baselineMetrics.unpricedEvents > 0) {
-      throw new SkipError('Skipped: Window contains unpriced events, understating cost');
     }
 
     let volumeMetric = 'requests';

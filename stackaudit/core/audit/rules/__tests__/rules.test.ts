@@ -67,6 +67,14 @@ describe('Audit Rules', () => {
       
       expect(() => rule.evaluate(ctx)).toThrow(/unpriced events/);
     });
+
+    it('keeps an all-unpriced window unknown and skips before cost arithmetic', () => {
+      const ctx = {
+        ...baseContext,
+        currentMetrics: { ...baseContext.currentMetrics, totalCost: null, unpricedEvents: 2 }
+      };
+      expect(() => rule.evaluate(ctx)).toThrow(/unpriced events/);
+    });
   });
 
   describe('TokenEfficiencyRule', () => {

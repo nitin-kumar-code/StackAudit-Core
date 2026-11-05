@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface DashboardAlert { id: string; category: string; workloadName?: string; finding?: { title?: string; evidence?: { change?: number; drift?: number } } }
-interface WorkloadSummary { id: string; name: string; cost: string | null; knownCost: string | null; usage: number; outcomes: number; costPerOutcome: string | null; changePct: number | null }
+interface WorkloadSummary { id: string; name: string; cost: string | null; knownCost: string | null; usage: number; outcomes: number; costPerOutcome: string | null; costPerOutcomeAvailabilityReason: string | null; changePct: number | null }
 interface CostChangeEvidence { workloadName: string; title: string; evidence?: { change?: number; drift?: number; baseline_cost?: number; baseline?: number } }
 interface DashboardSummary {
   totalCost: string | null; knownCost: string | null; isCostComplete?: boolean; unpricedEventCount?: number;
@@ -177,7 +177,17 @@ export default function DashboardPage() {
                         <td className="px-6 py-4">{w.cost !== null ? `$${Number(w.cost).toFixed(2)}` : w.knownCost !== null ? `$${Number(w.knownCost).toFixed(2)} partial` : 'Unavailable'}</td>
                         <td className="px-6 py-4 text-muted-foreground">{formatNumber(w.usage)} tkns</td>
                         <td className="px-6 py-4">{formatNumber(w.outcomes)}</td>
-                        <td className="px-6 py-4 font-medium">{w.costPerOutcome ? `$${Number(w.costPerOutcome).toFixed(3)}` : '—'}</td>
+                        <td className="px-6 py-4 font-medium">
+                          {w.costPerOutcome !== null ? `$${Number(w.costPerOutcome).toFixed(3)}` : (
+                            <span
+                              className="block max-w-xs whitespace-normal text-xs font-normal text-muted-foreground"
+                              title={w.costPerOutcomeAvailabilityReason ?? 'Cost per outcome is unavailable.'}
+                              aria-label={w.costPerOutcomeAvailabilityReason ?? 'Cost per outcome is unavailable.'}
+                            >
+                              {w.costPerOutcomeAvailabilityReason ?? 'Cost per outcome is unavailable.'}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-6 py-4">
                           {w.changePct !== null && w.changePct > 0 ? (
                             <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs font-medium">↑ {w.changePct}%</span>

@@ -107,9 +107,7 @@ export async function GET(req: Request) {
         unpricedEventCount: workload.unpricedEventCount
       };
       const outcomeTypes = Object.keys(workload.outcomeTypes || {});
-      const costPerOutcome = outcomeTypes.length === 1
-        ? calculateCostPerOutcome(costSummary, workload.outcomes).value
-        : null;
+      const costPerOutcome = calculateCostPerOutcome(costSummary, workload.outcomes, outcomeTypes.length);
 
       return {
         id: workload.id,
@@ -120,7 +118,8 @@ export async function GET(req: Request) {
         unpricedEventCount: workload.unpricedEventCount,
         usage: workload.usage,
         outcomes: workload.outcomes,
-        costPerOutcome,
+        costPerOutcome: costPerOutcome.value,
+        costPerOutcomeAvailabilityReason: costPerOutcome.reason,
         changePct: null
       };
     });

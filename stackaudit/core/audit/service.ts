@@ -19,12 +19,12 @@ export interface RunAuditResult {
 }
 
 interface AuditWindowAggregate {
-  known_cost: string;
+  known_cost: string | null;
   total_tokens: string;
   request_count: number;
   unpriced_events: number;
   models: Record<string, {
-    known_cost: string;
+    known_cost: string | null;
     total_tokens: string;
     request_count: number;
     unpriced_events: number;
@@ -151,7 +151,7 @@ export class AuditService {
     }) as AuditWindowAggregate;
 
     const models = Object.fromEntries(Object.entries(aggregate.models || {}).map(([model, values]) => [model, {
-      cost: Number(values.known_cost),
+      cost: values.known_cost === null ? null : Number(values.known_cost),
       tokens: Number(values.total_tokens),
       requests: Number(values.request_count)
     }]));
@@ -159,7 +159,7 @@ export class AuditService {
 
     return {
       metrics: {
-        totalCost: Number(aggregate.known_cost),
+        totalCost: aggregate.known_cost === null ? null : Number(aggregate.known_cost),
         totalTokens: Number(aggregate.total_tokens),
         requestCount: Number(aggregate.request_count),
         unpricedEvents: Number(aggregate.unpriced_events),

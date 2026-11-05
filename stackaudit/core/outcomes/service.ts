@@ -11,6 +11,7 @@ interface DailyOutcomeAggregateRow {
   known_cost: string | null;
   total_cost: string | null;
   period_start: string;
+  outcome_type_count: number | null;
 }
 interface OutcomeCostAggregateRow {
   known_cost: string | null;
@@ -18,6 +19,7 @@ interface OutcomeCostAggregateRow {
   total_outcomes: string | number | null;
   unpriced_events: number;
   priced_events: number;
+  outcome_type_count: number;
 }
 interface OutcomeAnalyticsRow extends OutcomeCostAggregateRow {
   workload_id: string;
@@ -191,7 +193,11 @@ export class OutcomeService {
     const isCostComplete = unpricedEventCount === 0;
     const knownCost = pricedEventCount > 0 || unpricedEventCount === 0 ? String(row.known_cost ?? '0') : null;
     const totalCost = isCostComplete ? String(row.total_cost ?? '0') : null;
-    const cpo = calculateCostPerOutcome({ knownCost, totalCost, isComplete: isCostComplete, pricedEventCount, unpricedEventCount }, totalOutcomeCount);
+    const cpo = calculateCostPerOutcome(
+      { knownCost, totalCost, isComplete: isCostComplete, pricedEventCount, unpricedEventCount },
+      totalOutcomeCount,
+      row.outcome_type_count ?? 1
+    );
 
     return {
       workloadId,
@@ -207,7 +213,9 @@ export class OutcomeService {
       unpricedEventCount,
       availabilityReason: cpo.reason,
       currency: 'USD',
-      costAllocationNote: 'Unallocated. This workload cost per outcome represents the total workload cost divided by this outcome type. It does not partition cost among different outcome types.'
+      costAllocationNote: (row.outcome_type_count ?? 1) > 1
+        ? 'Cost per outcome is withheld because workload cost cannot be assigned to one of multiple outcome types in this window.'
+        : 'Uses the workload total divided by its sole outcome type in this window; this is an average ratio, not a causal or per-request cost allocation.'
     };
   }
 
@@ -237,7 +245,11 @@ export class OutcomeService {
       const isCostComplete = unpricedEventCount === 0;
       const knownCost = pricedEventCount > 0 || unpricedEventCount === 0 ? String(d.known_cost ?? '0') : null;
       const totalCost = isCostComplete ? String(d.total_cost ?? '0') : null;
-      const cpo = calculateCostPerOutcome({ knownCost, totalCost, isComplete: isCostComplete, pricedEventCount, unpricedEventCount }, outcomeCount);
+      const cpo = calculateCostPerOutcome(
+        { knownCost, totalCost, isComplete: isCostComplete, pricedEventCount, unpricedEventCount },
+        outcomeCount,
+        d.outcome_type_count ?? 1
+      );
 
       return {
         periodStart: new Date(d.period_start),

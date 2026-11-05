@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 import Big from 'big.js';
 import crypto from 'crypto';
+import { OutcomeService } from '../../../../core/outcomes/service';
 
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY; database analytics integration tests require the local service-role key.');
@@ -14,8 +15,11 @@ if (!['localhost', '127.0.0.1'].includes(new URL(supabaseUrl).hostname)) {
 
 const supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const organizationId = crypto.randomUUID();
+const otherOrganizationId = crypto.randomUUID();
 const workloadAId = crypto.randomUUID();
 const workloadBId = crypto.randomUUID();
+const outcomeOnlyWorkloadId = crypto.randomUUID();
+const costOnlyWorkloadId = crypto.randomUUID();
 const start = new Date('2026-10-01T00:00:00.000Z');
 const end = new Date('2026-10-02T00:00:00.000Z');
 const datasetSize = 1200;
@@ -98,17 +102,23 @@ function assertNoError(error: { message: string } | null) {
 
 describe('Database analytics aggregation and pagination', () => {
   beforeAll(async () => {
-    const orgInsert = await supabase.from('organizations').insert({ id: organizationId, name: 'Query Scalability Fixture' });
+    const orgInsert = await supabase.from('organizations').insert([
+      { id: organizationId, name: 'Query Scalability Fixture' },
+      { id: otherOrganizationId, name: 'Isolated Analytics Fixture' }
+    ]);
     assertNoError(orgInsert.error);
     const workloadInsert = await supabase.from('workloads').insert([
       { id: workloadAId, organization_id: organizationId, name: 'Analytics workload A' },
-      { id: workloadBId, organization_id: organizationId, name: 'Analytics workload B' }
+      { id: workloadBId, organization_id: organizationId, name: 'Analytics workload B' },
+      { id: outcomeOnlyWorkloadId, organization_id: organizationId, name: 'Outcome only workload' },
+      { id: costOnlyWorkloadId, organization_id: organizationId, name: 'Cost only workload' }
     ]);
     assertNoError(workloadInsert.error);
     const rulesInsert = await supabase.from('attribution_rules').insert([
       { organization_id: organizationId, workload_id: workloadAId, provider: 'openai', match_type: 'api_key', match_value: 'key-a' },
       { organization_id: organizationId, workload_id: workloadBId, provider: 'openai', match_type: 'api_key', match_value: 'key-b' },
-      { organization_id: organizationId, workload_id: workloadBId, provider: 'anthropic', match_type: 'api_key', match_value: 'key-b' }
+      { organization_id: organizationId, workload_id: workloadBId, provider: 'anthropic', match_type: 'api_key', match_value: 'key-b' },
+      { organization_id: organizationId, workload_id: costOnlyWorkloadId, provider: 'openai', match_type: 'api_key', match_value: 'key-cost-only' }
     ]);
     assertNoError(rulesInsert.error);
 
@@ -133,21 +143,34 @@ describe('Database analytics aggregation and pagination', () => {
     }
     usageRows.push(fixtureRow('boundary-start', start, 'anthropic', 'claude', 'key-b', 100, 2, 7, '0.5000', true));
     usageRows.push(fixtureRow('boundary-end', end, 'anthropic', 'claude', 'key-b', 500, 1, 9, '1.0000', false));
+    usageRows.push(fixtureRow('cost-only-workload', new Date(start.getTime() + 30_000), 'openai', 'gpt-4', 'key-cost-only', 21, 8, 2, '0.7500', false));
 
     for (let offset = 0; offset < usageRows.length; offset += 200) {
       const result = await supabase.from('usage_events').insert(usageRows.slice(offset, offset + 200));
       assertNoError(result.error);
     }
+    const isolatedUsage = await supabase.from('usage_events').insert({
+      id: crypto.randomUUID(), organization_id: otherOrganizationId, provider: 'openai', model: 'isolated',
+      timestamp: new Date(start.getTime() + 1_000).toISOString(), input_tokens: 900, output_tokens: 100,
+      cache_read_tokens: 0, cache_creation_tokens: 0, request_count: 100, provider_reference: 'other-org-only',
+      calculated_cost: 999, raw_response_hash: 'isolated-fixture', is_unpriced: false
+    });
+    assertNoError(isolatedUsage.error);
 
     const outcomeInsert = await supabase.from('outcome_events').insert([
       { organization_id: organizationId, workload_id: workloadAId, outcome_type: 'ticket_resolved', timestamp: new Date(start.getTime() + 10_000).toISOString(), count: 9 },
-      { organization_id: organizationId, workload_id: workloadBId, outcome_type: 'ticket_resolved', timestamp: new Date(start.getTime() + 20_000).toISOString(), count: 3 }
+      { organization_id: organizationId, workload_id: workloadAId, outcome_type: 'ticket_resolved', timestamp: new Date(start.getTime() + 11_000).toISOString(), count: 2 },
+      { organization_id: organizationId, workload_id: workloadAId, outcome_type: 'lead_created', timestamp: new Date(start.getTime() + 12_000).toISOString(), count: 5 },
+      { organization_id: organizationId, workload_id: workloadBId, outcome_type: 'ticket_resolved', timestamp: new Date(start.getTime() + 20_000).toISOString(), count: 3 },
+      { organization_id: organizationId, workload_id: workloadBId, outcome_type: 'ticket_resolved', timestamp: end.toISOString(), count: 100 },
+      { organization_id: organizationId, workload_id: outcomeOnlyWorkloadId, outcome_type: 'ticket_resolved', timestamp: new Date(start.getTime() + 30_000).toISOString(), count: 4 },
+      { organization_id: organizationId, workload_id: outcomeOnlyWorkloadId, outcome_type: 'lead_created', timestamp: new Date(start.getTime() + 31_000).toISOString(), count: 6 }
     ]);
     assertNoError(outcomeInsert.error);
   }, 120_000);
 
   afterAll(async () => {
-    await supabase.from('organizations').delete().eq('id', organizationId);
+    await supabase.from('organizations').delete().in('id', [organizationId, otherOrganizationId]);
   });
 
   it('filters before pagination, uses a stable timestamp/id order, and summarizes all matching pages', async () => {
@@ -196,7 +219,7 @@ describe('Database analytics aggregation and pagination', () => {
     const startBody = startBoundary.data as { events: Array<{ id: string }>; summary: { totalEvents: number } };
     const emptyBody = empty.data as { events: unknown[]; summary: { totalEvents: number; totalRequests: number; knownCost: string; totalCost: string; isCostComplete: boolean }; pagination: { totalPages: number } };
     const beyondBody = beyondEnd.data as { events: unknown[]; summary: { totalEvents: number }; pagination: { total: number } };
-    expect(allBody.summary.totalEvents).toBe(datasetSize + 1);
+    expect(allBody.summary.totalEvents).toBe(datasetSize + 2);
     expect(startBody.summary.totalEvents).toBe(2);
     expect(startBody.events.some(row => row.id === usageRows.at(-2)?.id)).toBe(true);
     expect(allBody.events.some(row => row.id === usageRows.at(-1)?.id)).toBe(false);
@@ -207,6 +230,25 @@ describe('Database analytics aggregation and pagination', () => {
     expect(beyondBody.summary.totalEvents).toBe(beyondBody.pagination.total);
   });
 
+  it('rejects a duplicate provider reference while isolating organization totals', async () => {
+    const duplicate = await supabase.from('usage_events').insert({
+      ...usageRows[0], id: crypto.randomUUID()
+    });
+    expect(duplicate.error?.code).toBe('23505');
+
+    const result = await supabase.rpc('aggregate_dashboard_summary', {
+      p_organization_id: organizationId,
+      p_start_time: start.toISOString(),
+      p_end_time: end.toISOString()
+    });
+    assertNoError(result.error);
+    const body = result.data as { summary: { totalTokens: number; totalCost: string | null } };
+    expect(body.summary.totalTokens).toBe(usageRows
+      .filter(row => row.timestamp >= start.toISOString() && row.timestamp < end.toISOString())
+      .reduce((total, row) => total + row.input_tokens + row.output_tokens, 0));
+    expect(body.summary.totalTokens).toBeLessThan(1000);
+  });
+
   it('reconciles dashboard, trend, workload, provider/model, and outcome aggregates', async () => {
     const [dashboard, trends, outcomes] = await Promise.all([
       supabase.rpc('aggregate_dashboard_summary', {
@@ -214,7 +256,7 @@ describe('Database analytics aggregation and pagination', () => {
         p_start_time: start.toISOString(),
         p_end_time: end.toISOString()
       }),
-      supabase.rpc('aggregate_dashboard_trends', {
+      supabase.rpc('aggregate_dashboard_trends_v2', {
         p_organization_id: organizationId,
         p_start_time: start.toISOString(),
         p_end_time: end.toISOString()
@@ -240,7 +282,7 @@ describe('Database analytics aggregation and pagination', () => {
     expect(dashboardBody.summary.knownCost).not.toBeNull();
     expect(dashboardBody.workloads.reduce((sum, row) => sum + row.usage, 0) + dashboardBody.unattributed.usage).toBe(dashboardBody.summary.totalTokens);
     expect(dashboardBody.workloads.reduce((sum, row) => sum + row.totalRequests, 0) + dashboardBody.unattributed.totalRequests).toBe(dashboardBody.summary.totalRequests);
-    expect(dashboardBody.summary.totalOutcomes).toBe(12);
+    expect(dashboardBody.summary.totalOutcomes).toBe(29);
     expect(trendRows).toHaveLength(1);
     expect(Number(trendRows[0].total_tokens)).toBe(dashboardBody.summary.totalTokens);
     expect(trendRows[0].request_count).toBe(dashboardBody.summary.totalRequests);
@@ -272,10 +314,29 @@ describe('Database analytics aggregation and pagination', () => {
       expect(requestSum).toBe(dashboardBody.summary.totalRequests);
     }
 
-    expect(outcomeRows).toHaveLength(2);
+    expect(outcomeRows).toHaveLength(5);
     expect(outcomeRows.find(row => row.workload_id === workloadAId)?.total_cost)
       .not.toBe(outcomeRows.find(row => row.workload_id === workloadBId)?.total_cost);
-    expect(outcomeRows.every(row => row.outcome_type === 'ticket_resolved')).toBe(true);
+    expect(outcomeRows.find(row => row.workload_id === workloadAId && row.outcome_type === 'ticket_resolved'))
+      .toMatchObject({ total_outcomes: '11', outcome_type_count: 2 });
+    expect(outcomeRows.find(row => row.workload_id === workloadAId && row.outcome_type === 'lead_created'))
+      .toMatchObject({ total_outcomes: '5', outcome_type_count: 2 });
+    expect(outcomeRows.find(row => row.workload_id === outcomeOnlyWorkloadId))
+      .toMatchObject({ total_cost: '0', outcome_type_count: 2 });
+    expect(outcomeRows.every(row => row.workload_id !== costOnlyWorkloadId)).toBe(true);
+
+    const outcomeService = new OutcomeService(supabase);
+    const multiType = await outcomeService.getCostPerOutcome(organizationId, outcomeOnlyWorkloadId, 'ticket_resolved', start, end);
+    expect(multiType.totalCost).toBe('0');
+    expect(multiType.costPerOutcome).toBeNull();
+    expect(multiType.availabilityReason).toMatch(/multiple outcome types/);
+    const dailySeries = await outcomeService.getCostPerOutcomeSeries(
+      organizationId, outcomeOnlyWorkloadId, 'ticket_resolved', start, new Date('2026-10-04T00:00:00.000Z')
+    );
+    expect(dailySeries).toHaveLength(3);
+    expect(dailySeries[0].costPerOutcome).toBeNull();
+    expect(dailySeries[0].availabilityReason).toMatch(/multiple outcome types/);
+    expect(dailySeries.slice(1).map(point => point.costPerOutcome)).toEqual([null, null]);
   });
 
   it('measures raw-row versus bounded aggregate payloads on a deterministic dataset', async () => {
@@ -299,7 +360,7 @@ describe('Database analytics aggregation and pagination', () => {
     const aggregatePayloadBytes = Buffer.byteLength(JSON.stringify(aggregate));
     console.info(JSON.stringify({
       analyticsMeasurement: {
-        deterministicDatasetRowsInRange: datasetSize + 1,
+        deterministicDatasetRowsInRange: datasetSize + 2,
         legacyRawRowsReturnedByPostgrest: rawRows.length,
         boundedRpcEventsReturned: aggregate.events.length,
         legacyRawPayloadBytes: rawPayloadBytes,
@@ -310,7 +371,7 @@ describe('Database analytics aggregation and pagination', () => {
       }
     }));
 
-    expect(aggregate.summary.totalEvents).toBe(datasetSize + 1);
+    expect(aggregate.summary.totalEvents).toBe(datasetSize + 2);
     expect(aggregate.events.length).toBe(100);
     expect(aggregatePayloadBytes).toBeLessThan(rawPayloadBytes);
   });

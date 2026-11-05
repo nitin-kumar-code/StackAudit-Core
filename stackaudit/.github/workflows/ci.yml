@@ -51,6 +51,9 @@ jobs:
     - name: Reset local database and validate migrations
       run: supabase db reset
 
+    - name: Run SQL analytics tests (pgTAP)
+      run: supabase test db
+
     - name: Production build
       run: npm run build
 

@@ -179,7 +179,7 @@ The same forward migration adds indexes for organization/time pagination, provid
 - `app/api/v1` exposes the HTTP boundary; `app/app` contains dashboard pages.
 - `supabase/migrations` is the database schema history.
 
-See subsystem READMEs under `core/` for contracts and behavior. Integration checks require local Supabase. See `AUDIT_REPORT.md` for the repository audit and known gaps.
+See subsystem READMEs under `core/` for contracts and behavior. Integration checks require local Supabase. See [Analytics](ANALYTICS.md) for canonical metric semantics and source paths. See `AUDIT_REPORT.md` for the repository audit and known gaps.
 
 ## Data and privacy
 

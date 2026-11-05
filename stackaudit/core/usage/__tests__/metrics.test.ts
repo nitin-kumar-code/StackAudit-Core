@@ -50,10 +50,13 @@ describe('usage metrics', () => {
     expect(calculateCostPerOutcome(workloadB, 0).value).toBeNull();
   });
 
-  it('keeps outcome types separate within a workload', () => {
+  it('only calculates CPO when workload cost maps to a single outcome type', () => {
     const costs = aggregateUsageCosts([{ calculated_cost: '120', is_unpriced: false }]);
     expect(calculateCostPerOutcome(costs, 20).value).toBe('6');
-    expect(calculateCostPerOutcome(costs, 10).value).toBe('12');
+    expect(calculateCostPerOutcome(costs, 10, 2)).toMatchObject({
+      value: null,
+      reason: expect.stringContaining('multiple outcome types')
+    });
   });
 
   it('does not calculate CPO when pricing is partial, outcomes are absent, or count is zero', () => {

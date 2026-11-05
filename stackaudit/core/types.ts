@@ -19,7 +19,7 @@ export interface CostPerOutcomeResult {
   isCostComplete: boolean;
   pricedEventCount: number;
   totalOutcomeCount: number;
-  costPerOutcome: string | null; // Decimal string, null if count is 0
+  costPerOutcome: string | null; // Null when count is zero, pricing is incomplete, or cost cannot be scoped to one outcome type.
   unpricedEventCount: number;
   availabilityReason: string | null;
   currency: string;

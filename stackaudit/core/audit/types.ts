@@ -6,11 +6,12 @@ export interface TimeWindow {
 }
 
 export interface MetricSummary {
-  totalCost: number;
+  /** Known priced subtotal; null when every event in the window is unpriced. */
+  totalCost: number | null;
   totalTokens: number;
   requestCount: number;
   unpricedEvents: number; // Added for data quality checks
-  models?: Record<string, { cost: number; tokens: number; requests: number }>;
+  models?: Record<string, { cost: number | null; tokens: number; requests: number }>;
 }
 
 export interface AuditContext {

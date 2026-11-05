@@ -2,10 +2,8 @@
 
 This domain connects **AI Costs** to **Business Outcomes** to answer the fundamental question: *"How much does each completed business outcome cost in AI spend?"*
 
-## Workload Cost Per Outcome Type (Unallocated)
-The metric calculated here represents the **entire workload's AI spend** divided by the count of a **single outcome type**. 
-*   **Important Caveat**: If a workload produces multiple outcome types (e.g. `ticket_resolved` AND `email_drafted`), each type's CPO calculation divides the *total workload cost* by its own count. This results in "unallocated" CPO. We do not automatically invent allocation percentages across different outcome types.
-*   **Recommendation**: Workloads should ideally map to one primary outcome type, or users should understand that the cost is unallocated.
+## Workload Cost Per Outcome Type
+Cost per outcome is available only when exactly one outcome type is recorded for a workload in the selected window. With multiple types, the workload's full spend cannot be defensibly assigned to one type, so CPO is `null` with an availability reason. Daily series applies the same rule per day.
 
 ## Submission (Ingestion)
 External applications submit outcomes via `POST /api/v1/outcomes`.
@@ -16,11 +14,11 @@ External applications submit outcomes via `POST /api/v1/outcomes`.
 
 ## Cost Per Outcome Calculation
 The core formula:
-`Cost Per Outcome = known cost for one workload / count for one outcome type`
+`Cost Per Outcome = complete priced cost for one workload / its sole outcome type count`
 
 **Semantics:**
 *   **Unattributed Usage**: Usage that has not been mapped to a workload is entirely ignored.
-*   **Scope**: Costs and outcomes are matched to the same organization, workload, outcome type, and `[start, end)` window. Unattributed usage is not included.
+*   **Scope**: Costs and outcomes are matched to the same organization, workload, and `[start, end)` window. Unattributed usage is not included. CPO requires exactly one outcome type in that scope.
 *   **Incomplete pricing**: `knownCost` contains only priced events; `totalCost` and `costPerOutcome` are `null` when any event in that workload and window is unpriced. `unpricedEventCount` discloses the missing coverage.
 *   **Zero Outcomes**: If AI spend exists but zero outcomes are recorded, `costPerOutcome` returns `null`.
 *   **Zero Cost**: Returns `0`.

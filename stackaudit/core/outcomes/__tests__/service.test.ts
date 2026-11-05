@@ -123,6 +123,17 @@ describe('OutcomeService', () => {
       expect(result.availabilityReason).toMatch(/No outcomes/);
     });
 
+    it('does not assign full workload cost to one of multiple outcome types', async () => {
+      mockRpc.mockResolvedValueOnce({ data: [{
+        known_cost: '12', total_cost: '12', total_outcomes: '2', unpriced_events: 0,
+        priced_events: 1, outcome_type_count: 2
+      }], error: null });
+      const result = await service.getCostPerOutcome('org_1', wlId, 'ticket', new Date('2026-09-01'), new Date('2026-09-02'));
+      expect(result.totalCost).toBe('12');
+      expect(result.costPerOutcome).toBeNull();
+      expect(result.availabilityReason).toMatch(/multiple outcome types/);
+    });
+
     it('passes the exact half-open time window to the database aggregate', async () => {
       const start = new Date('2026-09-01T00:00:00Z');
       const end = new Date('2026-09-02T00:00:00Z');
