@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { LayoutDashboard, Server, Activity, Target, ShieldAlert, Settings, Bell } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -8,8 +9,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen bg-background text-base">
       {/* Sidebar */}
       <aside className="w-72 border-r border-border bg-sidebar flex flex-col hidden md:flex">
-        <div className="h-16 flex items-center px-6 border-b border-border text-xl font-semibold tracking-tight text-foreground">
-          AI Cost Intelligence
+        <div className="h-16 flex items-center px-6 border-b border-border">
+          <Link href="/app/dashboard" className="flex items-center gap-3 group">
+            <Image
+              src="/logo.png"
+              alt="StackAudit Logo"
+              width={32}
+              height={32}
+              className="rounded-lg shrink-0 object-contain"
+              priority
+            />
+            <span className="text-xl font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors">
+              StackAudit
+            </span>
+          </Link>
         </div>
         <nav className="flex-1 p-4 space-y-1.5">
           <NavItem href="/app/dashboard" icon={LayoutDashboard}>Overview</NavItem>
@@ -27,6 +40,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="h-16 border-b border-border bg-background flex items-center px-6 justify-between shrink-0">
+          <div className="flex items-center gap-3 md:hidden">
+            <Link href="/app/dashboard" className="flex items-center gap-2.5">
+              <Image
+                src="/logo.png"
+                alt="StackAudit Logo"
+                width={28}
+                height={28}
+                className="rounded-lg shrink-0 object-contain"
+              />
+              <span className="font-semibold tracking-tight text-foreground">
+                StackAudit
+              </span>
+            </Link>
+          </div>
           <div className="font-medium text-foreground hidden md:block">Organization Dashboard</div>
           <div className="flex items-center space-x-4">
             {/* Global Date Range Picker replaced by page-level selectors */}

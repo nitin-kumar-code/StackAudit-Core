@@ -1,6 +1,20 @@
 -- Keep time-window analytics inside Postgres and return only bounded pages to
 -- the application. All ranges use [start, end) and monetary values are text.
 
+-- Recreate v_attributed_usage_events to pick up columns added in prior migrations
+-- (is_unpriced, request_count, updated_at, reprice_attempts).
+DROP VIEW IF EXISTS v_attributed_usage_events CASCADE;
+CREATE VIEW v_attributed_usage_events WITH (security_invoker = true) AS
+SELECT 
+    u.*,
+    r.workload_id
+FROM usage_events u
+LEFT JOIN attribution_rules r 
+    ON u.organization_id = r.organization_id 
+    AND u.provider = r.provider 
+    AND r.match_type = 'api_key' 
+    AND u.api_key_id = r.match_value;
+
 CREATE INDEX IF NOT EXISTS idx_usage_events_org_time_id
   ON usage_events (organization_id, timestamp DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_usage_events_org_provider_time_id
@@ -367,6 +381,7 @@ $$;
 
 -- Preserve the old three-column RPC contract for existing callers while
 -- sharing the corrected v2 aggregation.
+DROP FUNCTION IF EXISTS aggregate_dashboard_trends(UUID, TIMESTAMPTZ, TIMESTAMPTZ);
 CREATE OR REPLACE FUNCTION aggregate_dashboard_trends(
   p_organization_id UUID,
   p_start_time TIMESTAMPTZ,

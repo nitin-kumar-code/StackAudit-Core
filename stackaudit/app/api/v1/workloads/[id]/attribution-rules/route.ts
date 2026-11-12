@@ -44,6 +44,15 @@ export async function POST(
         return NextResponse.json({ error: `Unknown field: ${key}` }, { status: 400 });
       }
     }
+    if (typeof body.provider !== 'string' || body.provider.length > 255) {
+      return NextResponse.json({ error: 'provider must be a string up to 255 characters' }, { status: 400 });
+    }
+    if (typeof body.matchType !== 'string' || body.matchType.length > 255) {
+      return NextResponse.json({ error: 'matchType must be a string up to 255 characters' }, { status: 400 });
+    }
+    if (typeof body.matchValue !== 'string' || body.matchValue.length > 255) {
+      return NextResponse.json({ error: 'matchValue must be a string up to 255 characters' }, { status: 400 });
+    }
 
     const rule = await workloadService.createAttributionRule(orgId, id, {
       provider: body.provider,

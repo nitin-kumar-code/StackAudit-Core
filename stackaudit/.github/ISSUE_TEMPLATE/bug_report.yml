@@ -1,0 +1,83 @@
+name: Bug Report
+description: Create a report to help us reproduce and fix an issue in StackAudit
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please verify that you are running the latest version of StackAudit.
+        **Important:** If this is a security vulnerability, please do NOT file a public issue. Follow [SECURITY.md](https://github.com/nitin-kumar-code/Ai-spend-audit/blob/main/SECURITY.md) instead.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: When uploading a CSV file with prompt cache tokens...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the issue.
+      placeholder: |
+        1. Run `npm run seed`
+        2. Navigate to `http://localhost:3000/app/usage`
+        3. Click 'Import CSV' and upload sample file
+        4. See error in browser console / terminal
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: The CSV records should be ingested and attributed to the workload.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Error Output
+      description: Paste relevant terminal logs, browser console output, or stack traces.
+      render: shell
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Operating System
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (Ubuntu/Debian)
+        - Linux (Other)
+        - Windows (WSL2)
+        - Windows (Native)
+    validations:
+      required: true
+
+  - type: input
+    id: node_version
+    attributes:
+      label: Node.js & Docker Version
+      description: What versions of Node.js (`node -v`) and Docker (`docker -v`) are you running?
+      placeholder: Node v22.22.2, Docker v27.0.3
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have verified that this is not a security vulnerability.
+          required: true
+        - label: I have checked existing issues to make sure this is not a duplicate.
+          required: true
+        - label: I have not included real API keys, passwords, or confidential data in this report.
+          required: true

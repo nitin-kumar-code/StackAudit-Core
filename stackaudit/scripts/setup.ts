@@ -35,13 +35,13 @@ export async function runSetup(): Promise<void> {
   if (!supabaseUrl || !supabaseKey) {
     console.error('✗ Missing database credentials in .env.local.\n');
     console.log('To set up local Supabase:');
-    console.log('  1. Run: supabase start');
-    console.log('  2. Copy the API URL and service_role key printed by supabase status into .env.local:');
+    console.log('  1. Run: npx supabase start');
+    console.log('  2. Copy the API URL and service_role key printed by npx supabase status into .env.local:');
     console.log('     NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321');
     console.log('     STACKAUDIT_DATABASE_MODE=local');
     console.log('     SUPABASE_SERVICE_ROLE_KEY=<service_role key>');
     console.log('     STACKAUDIT_WORKSPACE_ORG_ID=8a775c7f-e31c-8f9b-9000-000000000001');
-    console.log('  3. Run: supabase db reset');
+    console.log('  3. Run: npx supabase db reset');
     console.log('  4. Run: npm run setup\n');
     throw new Error('Supabase credentials not configured.');
   }
@@ -60,7 +60,7 @@ export async function runSetup(): Promise<void> {
     if (testError.message.includes('relation "organizations" does not exist') || testError.code === '42P01') {
       console.error('\n✗ Database schema has not been initialized.');
       console.log('Please apply migrations before running setup:');
-      console.log('  supabase db reset');
+      console.log('  npx supabase db reset');
       console.log('Then rerun: npm run setup\n');
       throw new Error('Database migrations not applied.');
     }

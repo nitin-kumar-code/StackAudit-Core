@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 
 export function listMigrations(): string[] {
   const migrationsDir = path.resolve(__dirname, '../supabase/migrations');
@@ -40,7 +40,7 @@ export function runMigrations(): void {
     for (const file of files) {
       const fullPath = path.join(migrationsDir, file);
       console.log(`Applying ${file}...`);
-      execSync(`psql "${dbUrl}" -f "${fullPath}"`, { stdio: 'inherit' });
+      execFileSync('psql', [dbUrl, '-f', fullPath], { stdio: 'inherit' });
     }
     console.log('\n✓ All migrations applied successfully.');
     return;
@@ -48,7 +48,7 @@ export function runMigrations(): void {
 
   // Supabase CLI can target a linked remote project; require explicit remote mode.
   if (mode !== 'remote') {
-    console.log('No DATABASE_URL provided. For local Supabase, apply migrations with: supabase db reset');
+    console.log('No DATABASE_URL provided. For a fresh local database, apply migrations with: npx supabase db reset');
     return;
   }
 
@@ -64,7 +64,7 @@ export function runMigrations(): void {
   }
 
   console.log('To apply migrations with Supabase CLI:');
-  console.log('  supabase db reset');
+  console.log('  npx supabase db reset');
   console.log('');
   console.log('Or set DATABASE_URL in .env.local to apply via direct PostgreSQL connection:');
   console.log('  DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres');

@@ -78,9 +78,15 @@ export async function POST(req: Request) {
         }
       }
     }
+    const duplicates = Math.max(0, parsed.events.length - fresh.length);
     return NextResponse.json({
-      validated: parsed.events.length, accepted: imported, rejected: errors.length + failures.length, imported, duplicates: unique.length - fresh.length,
-      unpriced, errors: [...errors, ...failures],
+      validated: parsed.events.length,
+      accepted: imported,
+      rejected: errors.length + failures.length,
+      imported,
+      duplicates,
+      unpriced,
+      errors: [...errors, ...failures],
       message: `${imported} rows imported; ${unpriced} imported without matching pricing.`
     }, { status: errors.length || failures.length ? 207 : 200 });
   } catch (error: unknown) {

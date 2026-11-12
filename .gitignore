@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+stackaudit/node_modules/
+.pnp/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Testing & Coverage
+coverage/
+stackaudit/coverage/
+
+# Next.js build outputs
+.next/
+stackaudit/.next/
+out/
+stackaudit/out/
+build/
+stackaudit/build/
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+*.pem
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Scratch & Temporary
+tmp/
+output/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment files (never commit real secrets)
+.env*
+!.env.example
+stackaudit/.env*
+!stackaudit/.env.example
+
+# Vercel
+.vercel/
+stackaudit/.vercel/
+
+# TypeScript build info
+*.tsbuildinfo
+stackaudit/*.tsbuildinfo
+next-env.d.ts
+stackaudit/next-env.d.ts
+
+# Supabase local development
+.branches/
+.temp/
+supabase/.branches/
+supabase/.temp/
+stackaudit/supabase/.branches/
+stackaudit/supabase/.temp/

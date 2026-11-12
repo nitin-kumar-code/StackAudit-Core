@@ -27,6 +27,16 @@ export async function POST(req: Request) {
     const orgId = await getAuthOrgId(req);
     const body = await req.json();
 
+    if (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {
+      return NextResponse.json({ error: 'Workload name is required' }, { status: 400 });
+    }
+    if (body.name.length > 255) {
+      return NextResponse.json({ error: 'Workload name exceeds maximum length of 255 characters' }, { status: 400 });
+    }
+    if (body.description && typeof body.description === 'string' && body.description.length > 2000) {
+      return NextResponse.json({ error: 'Workload description exceeds maximum length of 2000 characters' }, { status: 400 });
+    }
+
     const workload = await workloadService.createWorkload({
       organizationId: orgId,
       name: body.name,

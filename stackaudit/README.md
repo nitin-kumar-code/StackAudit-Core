@@ -1,192 +1,238 @@
+<div align="center">
+
 # StackAudit
 
-StackAudit is a self-hostable AI cost intelligence dashboard. It ingests provider usage records, applies effective-dated pricing, attributes usage to workloads, records business outcomes, and exposes cost, audit, and monitoring views.
+### Understand what your AI workloads actually cost.
 
-StackAudit V0 is a **single-user, locally self-hosted preview** for one operator or developer. It is not hardened for shared production hosting or multi-tenant use. Review [Security](SECURITY.md) before use.
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-16.2.4-black.svg)](https://nextjs.org/)
+[![Supabase](https://img.shields.io/badge/Database-Supabase_%2F_PostgreSQL-3ECF8E.svg)](https://supabase.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.22.2-green.svg)](https://nodejs.org/)
+[![Status](https://img.shields.io/badge/Status-V0_Developer_Preview-orange.svg)](#v0-preview-scope--trust-boundary)
 
-## First-Run Quickstart
+<p align="center">
+  <b>StackAudit</b> is an open-source AI Cost Intelligence platform that helps engineering teams track AI API usage, attribute spending to workloads, and understand the cost of producing meaningful outcomes.
+</p>
 
-Follow this sequence to set up a clean local installation from scratch.
+[Quick Start](#quick-start-under-3-minutes) · [Documentation](docs/) · [How It Works](#how-it-works) · [Feature Matrix](#core-capabilities) · [Report a Bug](https://github.com/nitin-kumar-code/Ai-spend-audit/issues/new/choose) · [Contribute](CONTRIBUTING.md)
+
+</div>
+
+---
+
+Instead of looking at AI spending as one large invoice at the end of the month, **StackAudit** helps you investigate:
+
+* **Which workloads are consuming your AI budget?** Separate customer-facing copilot traffic from background batch jobs, evaluations, and internal tooling.
+* **What does each workflow cost per outcome?** Calculate true unit economics, such as the exact AI cost to resolve a customer ticket, summarize a document, or onboard a user.
+* **Where is usage increasing unexpectedly?** Spot consumption surges and token anomalies before they compound on your provider bills.
+* **Which costs are unattributed or insufficiently priced?** Identify orphaned API keys and verify that token rates accurately capture prompt caching savings.
+* **Where should engineering teams investigate optimization opportunities?** Pinpoint workloads experiencing model drift, excessive prompt token bloat, or low cache hit rates.
+
+**Built for AI-native startups, developers, and engineering teams.**
+
+---
+
+## The 30-Second Briefing
+
+| Question | Answer |
+| :--- | :--- |
+| **What is StackAudit?** | An open-source, local-first cost intelligence platform and analytics dashboard for AI engineering workloads. |
+| **What problem does it solve?** | AI provider invoices are black boxes: they aggregate total token spend across thousands of requests with zero visibility into which feature or business workflow incurred the cost. StackAudit attributes token spend to specific engineering workloads and correlates costs with actual business outcomes. |
+| **Who should use it?** | AI engineers, tech leads, engineering managers, and founders deploying OpenAI and Anthropic models who need visibility into their unit economics. |
+| **How does it work?** | You import usage records via CSV or REST API. StackAudit normalizes usage across providers, applies versioned reference pricing with arbitrary decimal precision (`big.js`), maps usage to workloads via attribution rules, and calculates Cost Per Outcome (CPO). |
+| **How can I install it?** | Run 4 commands with Docker and Node.js (`npm ci`, `npx supabase start`, `npm run setup`, `npm run dev`) to have a complete dashboard running locally in under 3 minutes. |
+| **How can I contribute?** | Fork the repo, review our [Contributing Guide](CONTRIBUTING.md), pick up an issue, or add reference pricing fixtures for new models. |
+
+---
+
+## Product Preview
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│  STACKAUDIT  │  Dashboard  ·  Usage  ·  Workloads  ·  Outcomes  ·  Audits  ·  Alerts   │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│   TOTAL SPEND (30D)       TOTAL TOKENS            ACTIVE WORKLOADS      OPEN ALERTS    │
+│   $1,482.35               412.8M                  6 Active              2 Requiring    │
+│   ▲ +14.2% vs prev        (48.2% Cached)          100% Attributed       Attention      │
+│                                                                                        │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│  DAILY SPEND TREND                                 WORKLOAD ATTRIBUTION                │
+│  $ │              ╭───╮                            ┌────────────────────────────────┐  │
+│    │        ╭─────╯   ╰───╮                        │ ■ Support Copilot      42.5%   │  │
+│    │  ╭─────╯             ╰──────                  │ ■ Document Extraction  31.2%   │  │
+│    │──╯                                            │ ■ Code Review Agent    18.1%   │  │
+│    └─────────────────────────────                  │ ■ Other Workloads       8.2%   │  │
+│                                                    └────────────────────────────────┘  │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│  UNIT ECONOMICS (COST PER OUTCOME)                                                     │
+│  Workload               Outcome Metric            Volume        Cost / Outcome         │
+│  Support Copilot        Resolved Tickets          8,420         $0.075 / ticket        │
+│  Doc Extraction         Processed Invoices        14,100        $0.033 / document      │
+│  Code Review Agent      Reviewed PRs              1,240         $0.216 / review        │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## How It Works
+
+```mermaid
+flowchart LR
+    A[Usage Records<br/>CSV Import / API] --> B[Canonical Normalization<br/>core/providers]
+    B --> C[Effective-Dated Pricing<br/>core/pricing]
+    C --> D[(usage_events)]
+    E[Attribution Rules<br/>core/workloads] --> F[Attributed Workload Ledger]
+    D --> F
+    G[Outcome Events<br/>POST /api/v1/outcomes] --> H[Cost Per Outcome Engine<br/>core/outcomes]
+    F --> H
+    F --> I[Audit & Anomaly Detector<br/>core/audit]
+    I --> J[Actionable Alerts<br/>core/monitoring]
+```
+
+1. **Ingest & Normalize**: Provider records are normalized into canonical events capturing standard input/output tokens and prompt caching tokens (read & creation).
+2. **Precision Pricing**: Effective-dated rate cards calculate exact monetary costs with `big.js` decimal arithmetic, preventing sub-cent floating-point rounding errors.
+3. **Dynamic Attribution**: API key rules map usage events to business workloads without altering raw historical usage records.
+4. **Outcome Correlation**: Workload expenditures are correlated against business events to calculate clean unit economics (Cost Per Outcome).
+5. **Heuristic Audits**: Rule engines detect anomalies like unexpected token spikes, cost drift, prompt bloat, and model tier mix changes.
+
+---
+
+## Core Capabilities
+
+- :white_check_mark: **Multi-Model Reference Pricing**: Pre-configured pricing catalog for OpenAI and Anthropic models with effective dating support.
+- :white_check_mark: **Prompt Caching Economics**: Accurately accounts for cached input reads vs. cache creation writes to reflect true vendor invoices.
+- :white_check_mark: **Arbitrary-Precision Financial Math**: Engineered with `big.js` to ensure financial figures are exact down to fractional cents.
+- :white_check_mark: **Workload Attribution**: Map provider API keys to specific business workflows, teams, or services.
+- :white_check_mark: **Cost Per Outcome (CPO) Metrics**: Track unit costs like cost per customer resolution, cost per legal document parsed, or cost per user onboarding.
+- :white_check_mark: **Evidence-Based Auditing**: Automated detection across 4 categories: `USAGE_SPIKE`, `COST_DRIFT`, `TOKEN_EFFICIENCY`, and `MODEL_MIX`.
+- :white_check_mark: **Interactive Usage Explorer**: Filter usage by date ranges, providers, models, and workloads with server-side pagination.
+- :white_check_mark: **Deterministic 90-Day Demo**: Includes a synthetic data generator creating a realistic 90-day operational history with one command.
+
+---
+
+## V0 Preview Scope & Trust Boundary
+
+> [!IMPORTANT]
+> **StackAudit V0 is a single-user, locally self-hosted preview.**
+> To set clear expectations:
+> - **Ingestion**: Supported via canonical CSV upload in the UI and programmatic REST API. Live background scrapers connecting directly to third-party provider APIs are not included in V0.
+> - **Security**: Designed to run locally on your workstation or internal network. It does not require or store your OpenAI/Anthropic API keys.
+> - **Multi-Tenancy**: The current release does not include multi-tenant user authentication or team role-based access control (RBAC).
+
+See [SECURITY.md](SECURITY.md) for full details on the V0 security model and boundaries.
+
+---
+
+## Quick Start (Under 3 Minutes)
+
+Follow this sequence to set up a clean, fully populated instance on your machine.
 
 ### Prerequisites
 
-- **Node.js**: version 22.22.2+ and **npm** (the committed dependency lockfile includes packages requiring this runtime)
+- **Node.js**: `>= 22.22.2` and **npm**
 - **Docker**: Docker Desktop (or running Docker daemon)
-- **Supabase CLI**: installed globally (`npm install -g supabase` or `brew install supabase/tap/supabase`)
+- **Supabase CLI**: Included in dependencies; run via `npx supabase`
 
-> [!NOTE]
-> All commands should be run from inside the `stackaudit/` directory.
+### 1. Clone and Install Dependencies
 
-### 1. Install dependencies
-
-```sh
-cd stackaudit
+```bash
+git clone https://github.com/nitin-kumar-code/Ai-spend-audit.git
+cd Ai-spend-audit/stackaudit
 npm ci
 ```
 
-### 2. Configure environment
+### 2. Start Local Database and Configure Environment
 
-Copy the sample environment file:
+```bash
+# Start local Supabase Postgres instance
+npx supabase start
 
-```sh
+# Copy sample environment configuration
 cp .env.example .env.local
 ```
 
-### 3. Start local Supabase
-
-```sh
-supabase start
-```
-
-Retrieve the local credentials by running `supabase status`. Update `.env.local`:
+Retrieve your local credentials by running `npx supabase status`. Update `.env.local` with your `service_role` key:
 
 ```ini
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 STACKAUDIT_DATABASE_MODE=local
-SUPABASE_SERVICE_ROLE_KEY=<service_role key from supabase status>
+SUPABASE_SERVICE_ROLE_KEY=<service_role_key_from_supabase_status>
 STACKAUDIT_WORKSPACE_ORG_ID=8a775c7f-e31c-8f9b-9000-000000000001
 ```
 
-`STACKAUDIT_DATABASE_MODE=local` is required and accepts only a localhost Supabase URL. `STACKAUDIT_WORKSPACE_ORG_ID` explicitly selects the active workspace; the server verifies that it exists and never chooses another organization. Keep the service-role key in `.env.local` on the server. Do not prefix it with `NEXT_PUBLIC_` or put it in browser code.
+### 3. Initialize Schema and Demo Dataset
 
-### 4. Apply migrations
+```bash
+# 1. Apply database migrations
+npx supabase db reset
 
-Initialize the database schema from the migration history in `supabase/migrations/`:
-
-```sh
-supabase db reset
-```
-
-Fresh databases and upgrades use this ordered migration history. `full_setup.sql` is a retained legacy schema snapshot; it is not part of setup, is not applied by CI, and must not be used alongside migrations. Pricing and demo records are loaded separately by the fixture and seed commands below. See [Supabase migration guidance](supabase/README.md) for the source-of-truth policy.
-
-*(Alternatively, if `DATABASE_URL` is set, you can run `npm run db:migrate`).*
-
-### 5. Load reviewed pricing fixtures
-
-Populate the `pricing_catalog` with reviewed reference prices for OpenAI and Anthropic models:
-
-```sh
-npm run pricing:load
-```
-
-This loads versioned reference pricing (`fixtures/pricing/reference-pricing-v1.json`) covering input, output, and cached token rates with effective dating. Loading is idempotent and will never overwrite manually maintained production pricing.
-
-### 6. Seed demo dataset
-
-Seed 90 days of deterministic usage, workloads, attribution rules, and outcomes:
-
-```sh
-npm run seed
-```
-
-*(Note: `npm run seed` will also automatically load pricing fixtures if the catalog is empty).*
-
-The seeder runs the application's actual audit and monitoring engine on the seeded data, creating findings and alerts.
-
-#### All-in-one shortcut
-
-After starting Supabase and applying migrations, you can run steps 5 and 6 together:
-
-```sh
+# 2. Load pricing fixtures and seed 90 days of demo data
 npm run setup
 ```
 
-### 7. Start the application
+### 4. Launch the Dashboard
 
-```sh
+```bash
 npm run dev
 ```
 
-### 8. Open the dashboard
-
-Visit [http://localhost:3000](http://localhost:3000) in your browser. The dashboard will display live spend KPIs, workload allocations, cost trends, cost-per-outcome metrics, and active monitoring alerts.
+Open **[http://localhost:3000](http://localhost:3000)** in your browser to explore your local StackAudit instance!
 
 ---
 
-### Reproducible demo data
+## Available Commands
 
-`DEMO_SEED`, `DEMO_DATASET_DAYS`, and `DEMO_DATASET_END` define the scenario:
-- `DEMO_SEED` (default `12345`): seed for the pseudo-random generation.
-- `DEMO_DATASET_DAYS` (default `90`): number of days of history to generate.
-- `DEMO_DATASET_END` (optional): exclusive UTC timestamp for the end of the range. If left unset, it defaults to the current day's UTC midnight so the recent 14-day monitoring window and dashboard filters (Last 24h, Last 7d, Last 30d, Last 90d) immediately display recent traffic and active alerts. To replay a fixed historical scenario deterministically, specify an ISO timestamp (e.g. `2026-10-17T00:00:00.000Z`).
+All commands are executed from within the `stackaudit/` directory:
 
-`npm run seed` and `npm run seed:demo` replace the dedicated demo dataset. `npm run seed:reset` is the same safe reset-and-seed operation. Cleanup affects only the organization marked with `demo_seed_key: stackaudit-demo-v1`. Non-demo organizations and manual pricing records are untouched.
-
-The application refuses remote database targets unless `STACKAUDIT_DATABASE_MODE=remote` is explicitly set. Remote mode is a deliberate operator choice and does not make the deployment safe for shared users. Demo seeding remains localhost-only.
-
-### Import usage from CSV
-
-The Usage page is the supported V0 ingestion workflow. Download the sample CSV there (or from [`public/samples/stackaudit-usage.csv`](public/samples/stackaudit-usage.csv)), export usage from your provider console, map it to the canonical headers, then upload it. Required columns are `provider,model,timestamp,input_tokens,output_tokens,provider_reference`; optional columns are `cache_read_tokens,cache_creation_tokens,request_count,api_key_id`. Token counts must be non-negative integers, timestamps must be parseable, and provider references must be stable for deduplication. Include `api_key_id` to use an existing attribution rule. Imports show row errors, skipped duplicates, and rows without pricing. Upload limit: 5 MB / 10,000 rows.
-
-Provider adapters in `core/providers` are library primitives and are not connected provider integrations. StackAudit does not ask for or store provider API credentials in V0.
-
----
-
-## Troubleshooting
-
-- **`The pricing catalog has no OpenAI or Anthropic records`**:
-  Run `npm run pricing:load` to populate the reference pricing catalog from fixtures.
-- **`relation "organizations" does not exist`**:
-  Migrations have not been applied. Run `supabase db reset` to apply the migrations.
-- **Missing workspace configuration or empty dashboard**:
-  Ensure `STACKAUDIT_WORKSPACE_ORG_ID` in `.env.local` names an existing organization (the seeded demo ID is `8a775c7f-e31c-8f9b-9000-000000000001`).
-- **`Docker API connect error`**:
-  Ensure Docker Desktop is open and the Docker daemon is running before executing `supabase start`.
-- **`Last 7 Days shows $0.00 on dashboard`**:
-  If `DEMO_DATASET_END` is set in `.env.local` to a date in the past, usage events will not fall within the last 7 days. Comment out `DEMO_DATASET_END` in `.env.local` and re-run `npm run seed` to end the dataset at today's UTC midnight.
-- **`Refusing cleanup: organization ... is not marked as the StackAudit demo dataset`**:
-  The demo seeder refuses to delete data from an organization unless it has the explicit `demo_seed_key: stackaudit-demo-v1` marker. Use a clean database or ensure you are using the configured demo organization ID.
+| Command | Description |
+| :--- | :--- |
+| `npm run dev` | Starts the Next.js development server at `http://localhost:3000` |
+| `npm run setup` | Complete setup: loads pricing fixtures and seeds the demo dataset |
+| `npm run pricing:load` | Loads reference pricing fixtures (`fixtures/pricing/reference-pricing-v1.json`) |
+| `npm run seed` | Seeds deterministic 90-day demo usage, workloads, outcomes, and alerts |
+| `npm run typecheck` | Verifies TypeScript types across the entire project |
+| `npm run lint` | Runs ESLint rules and code style checks |
+| `npm test` | Runs the Vitest unit test suite |
+| `npm run test:integration` | Runs Supabase database integration tests |
+| `npm run build` | Builds the production Next.js application bundle |
 
 ---
 
-## Commands
+## Documentation
 
-```sh
-npm run typecheck         # Typecheck TypeScript files
-npm run lint              # Run ESLint checks
-npm test                  # Unit tests (excludes Supabase integration tests)
-npm run test:integration  # Database integration tests (requires local Supabase stack)
-npm run build             # Build production Next.js bundle
-npm run pricing:load      # Load reviewed reference pricing fixtures
-npm run seed              # Seed demo dataset (workloads, usage, outcomes, alerts)
-npm run seed:reset        # Reset and re-seed demo dataset
-npm run setup             # Full setup: verify schema, load pricing fixtures, seed demo
-npm run db:migrate        # Inspect and run database migrations
-npm run dev               # Start Next.js development server
-```
+Comprehensive documentation is available in the [`docs/`](docs/) directory:
 
-## Analytics query contracts
+- 📖 **[Installation Guide](docs/INSTALLATION.md)**: Exhaustive setup instructions, system prerequisites, and troubleshooting.
+- ⚙️ **[Configuration Reference](docs/CONFIGURATION.md)**: Environment variables, seed customization, and database security modes.
+- 🏗️ **[Architecture & Data Model](docs/ARCHITECTURE.md)**: Internal subsystems, canonical records, and financial calculation semantics.
+- 🔌 **[REST API Reference](docs/API_REFERENCE.md)**: Detailed endpoints, request/response contracts, and query bounds.
+- 🖥️ **[Self-Hosting Guide](docs/SELF_HOSTING.md)**: Operational guide for local self-hosting and deployment boundaries.
+- 🗄️ **[Database & Migrations](docs/DATABASE.md)**: Schema inventory, Postgres RPC aggregation functions, and indexing strategy.
 
-The Usage API uses the half-open time interval `[start, end)`. It defaults to 50 events per page, accepts at most 100, orders newest first by timestamp and event ID, and accepts ranges up to 366 days. Provider, model, and workload filters are applied before pagination. The response summary and filter options cover the entire filtered range, including when the requested page has no events.
+---
 
-The database aggregation contracts are defined in `supabase/migrations/20261028000000_query_scalability.sql`:
+## Roadmap
 
-- `aggregate_usage_page` returns a JSON object containing one bounded event page, whole-filtered-range totals, filter options, and pagination metadata. Monetary totals are decimal strings; `totalCost` is null when any matching usage is unpriced.
-- `aggregate_dashboard_summary` returns organization totals, workload totals, and unattributed totals from the same usage scan.
-- `aggregate_dashboard_trends_v2` returns one UTC-day row per day in the requested interval, with cost completeness, token/request totals, and outcomes scoped to the organization’s workloads. The original three-column `aggregate_dashboard_trends` contract remains available as a wrapper.
-- `aggregate_audit_window_v2` returns workload-scoped usage and outcome aggregates for one audit window.
-- `aggregate_outcome_analytics` returns workload/outcome-type groups with cost totals scoped to each workload.
+- [ ] **Streaming Proxy & Client SDK**: Lightweight TypeScript and Python wrappers for real-time request tagging.
+- [ ] **Automated Provider Sync**: Secure scheduled imports from OpenAI and Anthropic usage reporting APIs.
+- [ ] **Alert Webhooks**: Native notification integrations for Slack, Discord, and PagerDuty.
+- [ ] **Multi-User Authentication**: Team accounts, organization switching, and role-based access control (RBAC).
+- [ ] **Model Benchmark Overlays**: Contextualizing workload costs against quality/speed benchmark indexes.
 
-These functions are called by the server with the service-role client and use `[start, end)` bounds. The Usage API enforces page size and range bounds before calling the database; `aggregate_usage_page` also enforces the page-size ceiling.
+---
 
-The same forward migration adds indexes for organization/time pagination, provider/model-filtered usage reads, reverse workload attribution lookups, and organization/workload outcome windows. Existing outcome-type/time and attribution-rule uniqueness indexes remain in use for their matching query paths.
+## Contributing
 
-## Architecture
+We welcome contributions from the community! Whether you are reporting a bug, proposing new unit metrics, or adding pricing models, please check out our:
 
-- `core/providers` normalizes provider-specific usage into canonical events.
-- `core/pricing` resolves effective-dated prices and calculates costs with decimal arithmetic.
-- `core/usage` validates ingestion and reprices records when pricing becomes available.
-- `core/workloads` owns workload and attribution-rule operations.
-- `core/outcomes`, `core/audit`, and `core/monitoring` provide outcome analytics and evidence-based findings/alerts.
-- `app/api/v1` exposes the HTTP boundary; `app/app` contains dashboard pages.
-- `supabase/migrations` is the database schema history.
+- 🤝 **[Contributing Guidelines](CONTRIBUTING.md)**
+- 📜 **[Code of Conduct](CODE_OF_CONDUCT.md)**
+- 🔒 **[Security Policy](SECURITY.md)**
 
-See subsystem READMEs under `core/` for contracts and behavior. Integration checks require local Supabase. See [Analytics](ANALYTICS.md) for canonical metric semantics and source paths. See `AUDIT_REPORT.md` for the repository audit and known gaps.
-
-## Data and privacy
-
-Use only data you are authorized to process. Do not expose the Supabase service-role key. StackAudit V0 is a single-user local preview, not a hardened multi-tenant deployment. See [Security](SECURITY.md) for credentials, access boundaries, and remaining limitations.
+---
 
 ## License
 
-StackAudit is licensed under the Apache License, Version 2.0. See the root [`LICENSE`](LICENSE) file for the complete license text. The license applies to contributions incorporated into StackAudit as described in Section 5 of that license. Third-party components and assets may be subject to their own terms; see their applicable notices and documentation.
+StackAudit is open-source software licensed under the **[Apache License, Version 2.0](LICENSE)**.

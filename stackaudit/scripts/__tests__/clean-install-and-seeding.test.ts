@@ -16,19 +16,19 @@ import { aggregateUsageCosts, calculateCostPerOutcome } from '../../core/usage/m
 import { CostDriftRule } from '../../core/audit/rules/cost-drift';
 
 describe('1. Clean Installation & Migration Verification', () => {
-  it('has all 14 chronological migrations with valid SQL structure', () => {
+  it('has all 17 chronological migrations with valid SQL structure', () => {
     const migrations = listMigrations();
-    expect(migrations.length).toBe(14);
+    expect(migrations.length).toBe(17);
 
     // Verify ordering and essential milestones
     expect(migrations[0]).toBe('20260919000000_v0_initial_schema.sql');
     expect(migrations[1]).toBe('20260920000000_v0_phase5_attribution.sql');
-    expect(migrations[migrations.length - 1]).toBe('20261028000000_query_scalability.sql');
+    expect(migrations[migrations.length - 1]).toBe('20261106000000_align_service_columns.sql');
 
     const migrationsDir = path.resolve(__dirname, '../../supabase/migrations');
     for (const file of migrations) {
-      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
-      expect(sql.length).toBeGreaterThan(50);
+      const stats = fs.statSync(path.join(migrationsDir, file));
+      expect(stats.size).toBeGreaterThan(50);
     }
   });
 

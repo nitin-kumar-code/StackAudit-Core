@@ -35,8 +35,15 @@ export async function getAuthOrgId(req: Request): Promise<string> {
 
   // In local preview, a supplied identity may authenticate only for the configured
   // workspace. It can never select or switch the active workspace.
+  // In remote mode, unauthenticated access is strictly rejected.
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return orgId;
+  if (!authHeader) {
+    const mode = process.env.STACKAUDIT_DATABASE_MODE;
+    if (mode === 'remote') {
+      throw new UnauthorizedError('Authentication required in remote mode');
+    }
+    return orgId;
+  }
   const token = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (!token) throw new UnauthorizedError('Invalid Authorization header');
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);

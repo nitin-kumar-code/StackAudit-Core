@@ -2,7 +2,7 @@
 
 ## Canonical schema source
 
-`supabase/migrations/` is the canonical schema history. A fresh database is built by `supabase db reset`, which replays the ordered migrations from an empty local database. Existing databases are upgraded by applying the same forward migrations. CI verifies this clean replay on every pull request and main branch push.
+`supabase/migrations/` is the canonical schema history. A fresh database is built by `supabase db reset`, which replays the ordered migrations from an empty local database. Apply pending migrations to an existing local database with `supabase migration up --local`; CI verifies the clean replay on every pull request and main branch push.
 
 `full_setup.sql` is a retained legacy, all-in-one schema snapshot at the repository root. No current script, workflow, or documentation uses it to install or upgrade a database. It predates the current migration sequence and duplicates schema definitions that have since evolved. Keep it for historical reference only; do not execute it as an alternative provisioning path or combine it with migrations. Migration changes must be added as new forward-only SQL files under `supabase/migrations/`.
 
@@ -13,6 +13,7 @@ Pricing catalog fixtures and demo data are application data, not schema migratio
 ```sh
 npx supabase start
 npx supabase db reset
+npx supabase migration up --local
 npx supabase test db
 npm run test:integration
 npx supabase stop --no-backup

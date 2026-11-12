@@ -1,0 +1,56 @@
+name: Feature Request
+description: Propose a new feature, metric, pricing fixture, or improvement for StackAudit
+title: "[Feature]: "
+labels: ["enhancement", "proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement to StackAudit!
+        Please describe the problem you're trying to solve and how you envision the solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a specific problem or workflow friction?
+      placeholder: "When tracking Gemini or DeepSeek API costs, our team has to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution or workflow you'd like to see.
+      placeholder: Add reference pricing fixtures and canonical mapping for...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
+
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Domain Area
+      options:
+        - Ingestion & CSV Parsers
+        - Pricing Catalog & Currency Math
+        - Workload Attribution
+        - Cost Per Outcome (CPO) Analytics
+        - Audits & Anomaly Detection
+        - Dashboard UI & Charts
+        - Documentation & Dev Experience
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to submit a pull request implementing this feature.

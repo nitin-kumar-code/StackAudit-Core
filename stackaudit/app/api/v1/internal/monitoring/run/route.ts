@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '../../../../../../lib/supabase/client';
 import { MonitoringService } from '../../../../../../core/monitoring/monitoring-service';
@@ -22,9 +23,15 @@ export async function POST(req: Request) {
     }
 
     const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.replace('Bearer ', '').trim();
+    const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
 
-    if (!token || token !== cronSecret) {
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const tokenBuf = Buffer.from(token);
+    const secretBuf = Buffer.from(cronSecret);
+    if (tokenBuf.length !== secretBuf.length || !crypto.timingSafeEqual(tokenBuf, secretBuf)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

@@ -8,6 +8,7 @@ function getDatabaseConfig() {
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   validateDatabaseTarget(mode, supabaseUrl);
+  if (!supabaseUrl) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required on the server.');
   if (!supabaseKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required on the server.');
 
   return { supabaseUrl, supabaseKey };
