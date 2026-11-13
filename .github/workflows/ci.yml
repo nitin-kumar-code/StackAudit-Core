@@ -48,6 +48,11 @@ jobs:
         run: npm test
 
       - name: Production build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          SUPABASE_SERVICE_ROLE_KEY: dummy-build-service-role-key
+          STACKAUDIT_DATABASE_MODE: local
+          STACKAUDIT_WORKSPACE_ORG_ID: 8a775c7f-e31c-8f9b-9000-000000000001
         run: npm run build
 
   database:

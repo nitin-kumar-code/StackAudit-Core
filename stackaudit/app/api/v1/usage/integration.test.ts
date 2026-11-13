@@ -219,10 +219,12 @@ describe('Database analytics aggregation and pagination', () => {
     const startBody = startBoundary.data as { events: Array<{ id: string }>; summary: { totalEvents: number } };
     const emptyBody = empty.data as { events: unknown[]; summary: { totalEvents: number; totalRequests: number; knownCost: string; totalCost: string; isCostComplete: boolean }; pagination: { totalPages: number } };
     const beyondBody = beyondEnd.data as { events: unknown[]; summary: { totalEvents: number }; pagination: { total: number } };
+    const boundaryStart = usageRows.find(row => row.provider_reference === 'boundary-start');
+    const boundaryEnd = usageRows.find(row => row.provider_reference === 'boundary-end');
     expect(allBody.summary.totalEvents).toBe(datasetSize + 2);
     expect(startBody.summary.totalEvents).toBe(2);
-    expect(startBody.events.some(row => row.id === usageRows.at(-2)?.id)).toBe(true);
-    expect(allBody.events.some(row => row.id === usageRows.at(-1)?.id)).toBe(false);
+    expect(startBody.events.some(row => row.id === boundaryStart?.id)).toBe(true);
+    expect(allBody.events.some(row => row.id === boundaryEnd?.id)).toBe(false);
     expect(emptyBody.events).toEqual([]);
     expect(emptyBody.summary).toMatchObject({ totalEvents: 0, totalRequests: 0, knownCost: '0', totalCost: '0', isCostComplete: true });
     expect(emptyBody.pagination.totalPages).toBe(0);
@@ -246,7 +248,16 @@ describe('Database analytics aggregation and pagination', () => {
     expect(body.summary.totalTokens).toBe(usageRows
       .filter(row => row.timestamp >= start.toISOString() && row.timestamp < end.toISOString())
       .reduce((total, row) => total + row.input_tokens + row.output_tokens, 0));
-    expect(body.summary.totalTokens).toBeLessThan(1000);
+
+    // Verify cross-organization isolation: other organization's summary is completely separate
+    const otherResult = await supabase.rpc('aggregate_dashboard_summary', {
+      p_organization_id: otherOrganizationId,
+      p_start_time: start.toISOString(),
+      p_end_time: end.toISOString()
+    });
+    assertNoError(otherResult.error);
+    const otherBody = otherResult.data as { summary: { totalTokens: number; totalCost: string | null } };
+    expect(otherBody.summary.totalTokens).toBe(1000);
   });
 
   it('reconciles dashboard, trend, workload, provider/model, and outcome aggregates', async () => {

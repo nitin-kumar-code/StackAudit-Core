@@ -62,7 +62,7 @@ describe('Audit Engine Integration', () => {
     
     const costDrift = findings.find(f => f.category === 'COST_DRIFT');
     expect(costDrift).toBeDefined();
-    expect(costDrift?.evidence.metric).toBe('cost_drift');
+    expect(costDrift?.evidence.metric).toBe('unit_cost_drift');
     expect(costDrift?.timeWindowStart).toEqual(currentStart);
     
     const tokenEfficiency = findings.find(f => f.category === 'TOKEN_EFFICIENCY');

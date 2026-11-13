@@ -1,8 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { MonitoringConfig } from '../types';
+import { MonitoringConfig, AuditFinding, AuditCategory } from '../types';
 import { AuditService } from '../audit/service';
 import { AlertService } from './alerts/service';
-import { AuditCategory } from '../types';
 
 interface MonitoringConfigRow {
   id: string;
@@ -122,20 +121,51 @@ export class MonitoringService {
           end
         });
 
+        // Combine newly detected findings with any existing OPEN findings for this workload
+        const { data: openFindings } = await this.supabase
+          .from('audit_findings')
+          .select('*')
+          .eq('organization_id', config.organizationId)
+          .eq('workload_id', config.workloadId)
+          .eq('status', 'OPEN');
+
+        const allFindings: AuditFinding[] = [...auditResult.findings];
+        if (openFindings) {
+          for (const raw of openFindings) {
+            if (!allFindings.some(f => f.id === raw.id)) {
+              allFindings.push({
+                id: raw.id,
+                organizationId: raw.organization_id,
+                workloadId: raw.workload_id,
+                category: raw.category,
+                severity: raw.severity,
+                title: raw.title,
+                description: raw.description,
+                confidence: raw.confidence,
+                evidence: raw.evidence || {},
+                timeWindowStart: new Date(raw.time_window_start),
+                timeWindowEnd: new Date(raw.time_window_end),
+                detectedAt: new Date(raw.detected_at || raw.created_at || Date.now()),
+                status: raw.status
+              });
+            }
+          }
+        }
+
         evaluatedWorkloads++;
-        findingsCount += auditResult.findings.length;
+        findingsCount += allFindings.length;
 
-        const generatedCategories = new Set(auditResult.findings.map(f => f.category));
+        const activeCategories = new Set(allFindings.map(f => f.category));
 
-        for (const finding of auditResult.findings) {
+        for (const finding of allFindings) {
           const result = await this.alertService.processFinding(finding, config);
           if (result.alertCreated) alertsCount++;
         }
 
-        // D3: Only auto-resolve categories that were actually evaluated (not skipped)
+        // D3: Only auto-resolve categories that were actually evaluated and have no active findings
         const evaluatedRuleIds = new Set(auditResult.rulesEvaluated);
         for (const ruleId of evaluatedRuleIds) {
-          if (isAuditCategory(ruleId) && !generatedCategories.has(ruleId)) {
+          if (isAuditCategory(ruleId) && !activeCategories.has(ruleId)) {
             const fingerprint = AlertService.generateFingerprint(
               config.organizationId, config.workloadId, ruleId
             );
