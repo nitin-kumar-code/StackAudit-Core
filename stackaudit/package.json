@@ -6,9 +6,11 @@
     "node": ">=22.22.2"
   },
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev -H 127.0.0.1 --webpack",
+    "dev:private-network": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/run-server.ts dev",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "next start -H 127.0.0.1",
+    "start:private-network": "DOTENV_CONFIG_PATH=.env.local node -r dotenv/config node_modules/tsx/dist/cli.mjs scripts/run-server.ts start",
     "lint": "eslint",
     "test": "vitest run --exclude **/integration.test.ts",
     "test:ui": "vitest --ui",

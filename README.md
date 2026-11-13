@@ -115,13 +115,16 @@ flowchart LR
 ## V0 Preview Scope & Trust Boundary
 
 > [!IMPORTANT]
-> **StackAudit V0 is a single-user, locally self-hosted preview.**
-> To set clear expectations:
-> - **Ingestion**: Supported via canonical CSV upload in the UI and programmatic REST API. Live background scrapers connecting directly to third-party provider APIs are not included in V0.
-> - **Security**: Designed to run locally on your workstation or internal network. It does not require or store your OpenAI/Anthropic API keys.
-> - **Multi-Tenancy**: The current release does not include multi-tenant user authentication or team role-based access control (RBAC).
-
-See [SECURITY.md](SECURITY.md) for full details on the V0 security model and boundaries.
+> **StackAudit V0 is a single-user, local-first evidence ledger.**
+> It is designed to run exclusively on an operator's workstation (`127.0.0.1`) or within an explicitly controlled, isolated private network boundary.
+> It is **NOT** a public multi-tenant SaaS application.
+> 
+> * **Localhost Binding**: Next.js binds strictly to `127.0.0.1:3000` by default. Wildcard host binding (`0.0.0.0`) is prohibited in local mode.
+> * **Single Operator Workspace**: All operations are explicitly scoped to `STACKAUDIT_WORKSPACE_ORG_ID`. The application never selects an organization implicitly.
+> * **No Multi-Tenancy**: The current release does not include multi-tenant user authentication, user sessions, or team RBAC. Service-role database access bypasses PostgreSQL RLS.
+> * **Safe Ingestion**: Supported via offline canonical CSV upload in the UI and programmatic REST API. It does not require or store your OpenAI/Anthropic API keys.
+> 
+> See **[DEPLOYMENT.md](DEPLOYMENT.md)** and **[SECURITY.md](SECURITY.md)** for exhaustive details on deployment boundaries, security guardrails, and future multi-tenancy requirements.
 
 ---
 
@@ -156,8 +159,9 @@ cp .env.example .env.local
 Retrieve your local credentials by running `npx supabase status`. Update `.env.local` with your `service_role` key:
 
 ```ini
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+STACKAUDIT_DEPLOYMENT_MODE=local
 STACKAUDIT_DATABASE_MODE=local
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_SERVICE_ROLE_KEY=<service_role_key_from_supabase_status>
 STACKAUDIT_WORKSPACE_ORG_ID=8a775c7f-e31c-8f9b-9000-000000000001
 ```

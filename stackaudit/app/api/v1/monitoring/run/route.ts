@@ -22,6 +22,7 @@ export async function POST(req: Request) {
       .from('monitoring_runs')
       .select('*')
       .eq('id', runId)
+      .eq('organization_id', orgId)
       .single();
 
     return NextResponse.json(runData, { status: 200 });

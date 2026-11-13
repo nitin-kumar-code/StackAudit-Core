@@ -5,7 +5,7 @@ The correctness and security pass over Phases 4-8 is fully implemented.
 ## Changes Completed by Group
 
 ### Group A — Security
-* **A1 (Cron Auth):** Created an internal `POST /api/v1/internal/monitoring/run` endpoint using a `CRON_SECRET` for cross-org runs, removed `runMonitoring(undefined)` capability from user routes, and added in-memory rate limiting to `POST /api/v1/monitoring/run`.
+* **A1 (Cron Auth):** Created an internal `POST /api/v1/internal/monitoring/run` endpoint using a `CRON_SECRET` strictly scoped to the configured workspace (`STACKAUDIT_WORKSPACE_ORG_ID`), removed `runMonitoring(undefined)` capability from user routes, and added in-memory rate limiting to `POST /api/v1/monitoring/run`.
 * **A2 (Webhook SSRF):** Completely rewrote `WebhookChannel.send`. Validates URLs by resolving DNS and explicitly blocking private (RFC 1918), loopback, link-local, and unspecified IPs. Applies 10s `AbortSignal.timeout`.
 * **A3 (Webhook Encryption):** Implemented AES-256-GCM encryption in `lib/crypto.ts`. Webhook secrets are now decrypted on-the-fly inside `WebhookChannel` prior to HMAC signing.
 * **A4 (app_metadata provenance):** Verified Supabase's client-side restrictions and added `lib/__tests__/auth.test.ts` as a security assertion to document that the architecture is safe by design.

@@ -1,8 +1,21 @@
-# StackAudit V0 architecture and data model
+# StackAudit V0 — Architecture and Data Model
 
-StackAudit V0 is a **single-user local preview**. It is a local ledger and analysis tool for one operator, not a production multi-tenant service. Read [self-hosting](SELF_HOSTING.md), [API reference](API_REFERENCE.md), and [database inventory](DATABASE.md) alongside this overview.
+StackAudit V0 is a **single-user, local-first evidence ledger** for AI usage. It is designed to run on an operator's workstation or within an explicitly controlled private network boundary. It is **NOT** a production multi-tenant SaaS application.
 
-## Main data path
+Read [deployment guide](DEPLOYMENT.md), [self-hosting](SELF_HOSTING.md), [security policy](../SECURITY.md), and [database inventory](DATABASE.md) alongside this overview.
+
+---
+
+## 1. Architectural Principles and Trust Boundary
+
+1. **Local-First Single Operator**: All computations, aggregations, and ingestion events are bound to one explicitly configured workspace (`STACKAUDIT_WORKSPACE_ORG_ID` or `STACKAUDIT_ORG_ID`).
+2. **Explicit Workspace Resolution**: The server validates the organization exists and rejects any caller attempts to supply or switch organization contexts. It never selects an organization implicitly.
+3. **Localhost Binding by Default**: Server scripts (`dev` and `start`) bind explicitly to `127.0.0.1`. Binding to wildcard `0.0.0.0` is blocked in local deployment mode.
+4. **Service-Role Database Access & RLS Boundary**: The application server accesses PostgreSQL via the Supabase `service_role` key, which **bypasses Row-Level Security (RLS)**. RLS denies direct browser/anon/authenticated access to tables and RPCs, but within the Next.js backend, workspace isolation is enforced strictly by application code (`.eq('organization_id', orgId)`).
+
+---
+
+## 2. Main Data Path
 
 ```mermaid
 flowchart LR
@@ -20,52 +33,61 @@ flowchart LR
   WK --> CPO[Cost per outcome]
 ```
 
-The supported user-facing usage import is CSV. OpenAI and Anthropic adapter code is a library primitive only: V0 has no provider credential connection, provider usage sync route, or scheduler for them. Outcomes can be submitted with `POST /api/v1/outcomes`.
+The supported user-facing usage import is CSV. OpenAI and Anthropic adapter code is a library primitive: V0 has no direct background scraping or automated API key harvesting. Outcomes can be submitted with `POST /api/v1/outcomes`.
 
-## Canonical records
+---
+
+## 3. Canonical Records and Subsystems
 
 ### `CanonicalUsageEvent`
+Application type in `core/types.ts`: stable event `id`; provider and model; event `timestamp`; `usage` (`inputTokens`, `outputTokens`, optional `cacheReadTokens`, `cacheCreationTokens`, `requestCount`); attribution hints (`apiKeyId`, optional tags); stable `providerReference`; `rawResponseHash`; optional capture time and unpriced flag.
 
-Application type in `core/types.ts`: stable event `id`; provider and model; event `timestamp`; `usage` (`inputTokens`, `outputTokens`, optional `cacheReadTokens`, `cacheCreationTokens`, `requestCount`); attribution hints (`apiKeyId`, optional tags); stable `providerReference`; `rawResponseHash`; optional capture time and unpriced flag. The CSV adapter currently maps `api_key_id` and does not accept arbitrary tags or a caller-supplied event ID/hash.
-
-The database stores the normalized values in `usage_events`. Attribution is not stored as a workload foreign key: the `v_attributed_usage_events` view joins an event to an attribution rule on organization, provider, `match_type='api_key'`, and `api_key_id=match_value`. A changed/deleted rule can therefore change historical workload attribution when queried later.
+The database stores normalized records in `usage_events`. Attribution is derived dynamically via the `v_attributed_usage_events` view by joining usage events to active attribution rules on `(organization_id, provider, match_type='api_key', match_value=api_key_id)`.
 
 ### `PricingRecord`
+Contains provider, model, decimal-string rates for input, output, cache-read, and cache-creation tokens, effective-from and optional effective-until timestamps, source, and ID. Prices apply over `[effectiveFrom, effectiveUntil)`. The catalog expects exactly one matching record for the usage timestamp. Missing or incomplete rates mark usage as unpriced; overlapping records produce an ambiguous-price error.
 
-Contains provider, model, decimal-string rates for ordinary input/output and optional cache read/cache creation, effective-from and optional effective-until timestamps, source, and ID. Prices apply over `[effectiveFrom,effectiveUntil)`. The catalog expects exactly one matching provider/model record for the usage timestamp. Missing or incomplete rates produce an unpriced usage record; overlapping records produce an ambiguous-price error rather than a guess. The database has no exclusion constraint preventing overlapping effective periods.
-
-Rates are per million tokens. `cacheReadTokens + cacheCreationTokens` are defined as subsets of total `inputTokens`; ordinary input is `input - cacheRead - cacheCreation`. Cost is computed with decimal arithmetic (`big.js`) as ordinary input, cache-read, cache-creation, and output components. Negative token/rate values or cached tokens greater than input are invalid. A required cache rate missing for a non-zero cache count makes the event unpriced.
+Cost calculations use arbitrary-precision decimal arithmetic (`big.js`) across ordinary input, cache-read, cache-creation, and output components. Negative tokens or cached counts exceeding total input are rejected.
 
 ### `Workload` and `AttributionRule`
-
-A workload names an AI-backed business process. Rules map a provider plus a match type/value to one workload; the supported matching path is API key ID. A database uniqueness constraint makes one `(organization, provider, match type, match value)` map to at most one rule. The application does not validate provider or match type against an enum; only `api_key` is currently consumed by the attribution view.
+A workload represents a business workflow (e.g., "Customer Support Copilot", "Document Summarizer"). Attribution rules map provider API keys to workloads. A database uniqueness constraint enforces that `(organization_id, provider, match_type, match_value)` maps to at most one rule.
 
 ### `OutcomeEvent`
-
-An outcome records organization, optional workload reference, type, event timestamp, positive count, optional JSON metadata, and optional idempotency key. The API verifies that the workload belongs to the configured workspace and validates count/type/date/metadata size. The table does not enforce the cross-organization workload relationship or positive count.
-
-An outcome count is an operator/application assertion; StackAudit does not verify that the business event really occurred. The schema has no event-level lifecycle, correction/reversal, reopened outcome, human-intervention, causal link to a specific AI request, or quality measurement. A submitter should correct upstream reporting and use new IDs/keys where appropriate; the current API has no outcome update/delete route.
+An outcome records an operator-reported business event: organization, workload reference, type, timestamp, positive count, optional JSON metadata, and an idempotency key. The API enforces that the referenced workload belongs to the operator's workspace.
 
 ### `AuditFinding`
+Evidence-bearing results generated by heuristic audit rules comparing equal-length time windows:
+- `USAGE_SPIKE`: Sudden volume surge.
+- `COST_DRIFT`: Cost growth outpacing usage or outcomes.
+- `TOKEN_EFFICIENCY`: Prompt token bloat or low cache hit rates.
+- `MODEL_MIX`: Shift toward higher-cost models.
 
-An audit finding is an evidence-bearing result for a category and an effective time window. The registered audit rules currently evaluate `USAGE_SPIKE`, `COST_DRIFT`, `TOKEN_EFFICIENCY`, and `MODEL_MIX`. `RETRY_PATTERN` remains in the shared category type but has no registered rule. Severity/confidence levels are represented as text. `POST /api/v1/audits` compares a UTC-day-snapped current window with the immediately preceding window of equal length. It clamps the current end to UTC today and the earliest available sync watermark when one can be read. Findings are upserted by organization/workload/category/window so a repeat run refreshes evidence rather than duplicating that finding. Audits are heuristic explanations over imported records, not invoice reconciliation or proof of provider overbilling.
+Findings are deduplicated and upserted by `(organization_id, workload_id, category, window_start, window_end)`.
 
-### Monitoring config, run, and alert
+### Monitoring and Alerts
+Workload monitoring configurations evaluate active findings and manage alert lifecycles (`OPEN`, `ACKNOWLEDGED`, `RESOLVED`). Webhook channels deliver notifications with SSRF-safe DNS pinning and IPv4/IPv6 private address blocking.
 
-`monitoring_configs` stores an enabled flag, optional workload, evaluation-window settings, notification channels, and alert policy as JSON. Monitoring currently evaluates workload configs, not an organization-wide null-workload config. `monitoring_runs` records status, counts, and error text. An alert is deduplicated by a deterministic fingerprint containing organization, workload (or `global`), and category. It may be opened, acknowledged, resolved, reopened, or escalated as findings change. A monitoring run can automatically resolve alerts for evaluated categories that no longer fire.
+---
 
-Webhook dispatch code exists, but there is no public API/UI to configure monitoring configs or webhook channels. No claim of reliable background execution is made: the operator or external scheduler must call the monitoring endpoint. Its rate limiter is in-memory and suitable only for this single-process preview.
+## 4. Financial and Analytical Contracts
 
-The forward migration `20261106000000_align_service_columns.sql` adds the alert retry/error bookkeeping columns and aligns the audit sync watermark column; see the [database inventory](DATABASE.md).
+- **Total vs. Known Cost**: `knownCost` is the sum of priced usage. `totalCost` is strictly `null` if any event in the window is unpriced. Unpriced events are never treated as zero cost.
+- **Cost Per Outcome (CPO)**: CPO is defined as total workload cost divided by outcome volume. It is valid only when:
+  1. All usage in the window is priced (`isCostComplete = true`).
+  2. Outcome count is positive (`> 0`).
+  3. Exactly one outcome type exists in that workload and window.
+  If multiple outcome types exist, CPO is withheld to prevent invalid cost attribution.
 
-## Financial and analytical semantics
+---
 
-- Request count sums `request_count` (historical nulls use one).
-- Tokens sum input plus output. Cache counts are not counted again because they are input subsets.
-- `knownCost` is the priced subtotal. `totalCost` is `null` if any matching event is unpriced; a stored zero cost placeholder is never treated as confirmed cost.
-- Attributed cost comes from current API-key rules. Unmatched events are reported separately as unattributed and are excluded from workload economics.
-- Outcome count is the sum of event `count` within the same organization, workload, outcome type, and half-open window.
-- CPO requires complete pricing, at least one outcome, and exactly one outcome type in the workload/window. It is full workload cost divided by the sole outcome count: an average ratio, not a causal allocation or per-request cost.
-- USD is assumed by the current CPO response; there is no currency field on pricing rows or automatic FX handling.
+## 5. Unsupported Scenarios and Future Multi-Tenancy
 
-See [ANALYTICS.md](../ANALYTICS.md) for the canonical metric contract and SQL reconciliation fixture.
+StackAudit V0 must not be deployed as a public SaaS or shared multi-user application.
+
+Before public multi-tenant deployment can be supported, StackAudit must implement:
+- User identity, password hashing, and session management.
+- Declarative PostgreSQL Row-Level Security policies enforced under user-authenticated roles.
+- Multi-tenant organization membership and RBAC.
+- Tenant-scoped authorization on all protected routes and actions.
+- Cross-tenant isolation verification test suites.
+- KMS-backed credential management and audit logging.

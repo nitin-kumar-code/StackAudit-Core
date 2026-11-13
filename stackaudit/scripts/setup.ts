@@ -4,19 +4,13 @@ import * as path from 'node:path';
 import { loadPricingFixtures } from './load-pricing-fixtures';
 import { seedDemoData } from './seed-demo-data';
 
-function checkOrInitializeEnvFile(): boolean {
+function checkEnvFile(): boolean {
   const envLocalPath = path.resolve(__dirname, '../.env.local');
-  const envExamplePath = path.resolve(__dirname, '../.env.example');
-
   if (!fs.existsSync(envLocalPath)) {
-    if (fs.existsSync(envExamplePath)) {
-      fs.copyFileSync(envExamplePath, envLocalPath);
-      console.log('✓ Created .env.local from .env.example');
-      return true;
-    } else {
-      console.error('✗ Neither .env.local nor .env.example found.');
-      return false;
-    }
+    console.error('✗ .env.local not found.');
+    console.log('Please copy .env.example to .env.local and configure your environment variables:');
+    console.log('  cp .env.example .env.local\n');
+    return false;
   }
   return true;
 }
@@ -25,7 +19,9 @@ export async function runSetup(): Promise<void> {
   console.log('=== StackAudit First-Run Setup ===\n');
 
   // 1. Ensure environment file exists
-  checkOrInitializeEnvFile();
+  if (!checkEnvFile()) {
+    throw new Error('.env.local is required. Copy .env.example to .env.local and configure credentials before running setup.');
+  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -24,8 +24,9 @@ const days = Number(process.env.DEMO_DATASET_DAYS ?? DEMO_DATASET_DAYS);
 
 function requireConfiguration() {
   if (process.env.STACKAUDIT_DATABASE_MODE !== 'local') throw new Error('Demo seeding requires STACKAUDIT_DATABASE_MODE=local.');
-  if (!process.env.STACKAUDIT_WORKSPACE_ORG_ID) throw new Error('STACKAUDIT_WORKSPACE_ORG_ID is required; refusing to seed an implicit workspace.');
-  if (process.env.STACKAUDIT_WORKSPACE_ORG_ID !== DEMO_ORGANIZATION_ID) throw new Error('The demo dataset organization must match STACKAUDIT_WORKSPACE_ORG_ID.');
+  const configuredOrg = process.env.STACKAUDIT_WORKSPACE_ORG_ID || process.env.STACKAUDIT_ORG_ID;
+  if (!configuredOrg) throw new Error('STACKAUDIT_WORKSPACE_ORG_ID is required; refusing to seed an implicit workspace.');
+  if (configuredOrg !== DEMO_ORGANIZATION_ID) throw new Error('The demo dataset organization must match STACKAUDIT_WORKSPACE_ORG_ID.');
   const dbHost = supabaseUrl ? new URL(supabaseUrl).hostname : '';
   if (!['localhost', '127.0.0.1', '::1'].includes(dbHost)) throw new Error('Demo seeding requires a localhost Supabase URL.');
   if (!supabaseUrl) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required; refusing to seed an unidentified database.');

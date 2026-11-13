@@ -36,6 +36,17 @@ export async function POST(req: Request) {
     }
 
     const workspaceId = await getValidatedWorkspaceId();
+
+    // Prevent caller from attempting cross-organization execution via query parameters
+    const url = new URL(req.url);
+    const requestedOrg = url.searchParams.get('organization_id') || url.searchParams.get('org_id') || url.searchParams.get('orgId');
+    if (requestedOrg && requestedOrg !== workspaceId) {
+      return NextResponse.json(
+        { error: 'Forbidden: Cannot target arbitrary organization in single-workspace V0 deployment.' },
+        { status: 403 }
+      );
+    }
+
     const runId = await monitoringService.runMonitoring(workspaceId);
     const runIds = [runId];
 
