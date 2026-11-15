@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+// Nonce-based CSP requires request-time rendering in Next.js.
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = {
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "white" },

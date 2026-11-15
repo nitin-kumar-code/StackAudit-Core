@@ -1,5 +1,26 @@
 import { spawn } from 'node:child_process';
+import { isIP } from 'node:net';
 import { validateDeploymentMode } from '../lib/deployment';
+
+export function validateServerAddress(host: string, port: string): { host: string; port: string } {
+  const normalizedHost = host.trim();
+  const normalizedPort = port.trim();
+  const validHostname = /^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(?:\.(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*\.?$/;
+
+  if (!normalizedHost || (isIP(normalizedHost) === 0 && !validHostname.test(normalizedHost))) {
+    throw new Error('STACKAUDIT_HOST must be an IP address or a valid hostname.');
+  }
+
+  if (!/^\d{1,5}$/.test(normalizedPort)) {
+    throw new Error('PORT must be an integer between 1 and 65535.');
+  }
+  const numericPort = Number(normalizedPort);
+  if (numericPort < 1 || numericPort > 65535) {
+    throw new Error('PORT must be an integer between 1 and 65535.');
+  }
+
+  return { host: normalizedHost, port: String(numericPort) };
+}
 
 function main() {
   const command = process.argv[2] || 'dev';
@@ -30,8 +51,17 @@ function main() {
     process.exit(1);
   }
 
-  const host = process.env.STACKAUDIT_HOST || process.env.HOST || '0.0.0.0';
-  const port = process.env.PORT || '3000';
+  let host: string;
+  let port: string;
+  try {
+    ({ host, port } = validateServerAddress(
+      process.env.STACKAUDIT_HOST || process.env.HOST || '0.0.0.0',
+      process.env.PORT || '3000'
+    ));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 
   console.log('\n================================================================');
   console.log('🔒 StackAudit V0 — Private-Network Deployment Mode');
@@ -50,7 +80,7 @@ function main() {
 
   const child = spawn('next', args, {
     stdio: 'inherit',
-    shell: true,
+    shell: false,
     env: process.env,
   });
 
@@ -63,4 +93,6 @@ function main() {
   process.on('SIGTERM', () => child.kill('SIGTERM'));
 }
 
-main();
+if (!process.env.VITEST) {
+  main();
+}
