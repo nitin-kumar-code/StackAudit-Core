@@ -1,3 +1,5 @@
 provider,model,timestamp,input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens,request_count,api_key_id,provider_reference
 openai,gpt-4o-mini,2026-10-01T12:00:00Z,1200,300,100,0,1,sk-proj-example,example-openai-usage-001
-anthropic,claude-sonnet-4-5,2026-10-01T12:15:00Z,800,250,0,120,1,sk-ant-example,example-anthropic-usage-001
+anthropic,claude-3-5-sonnet,2026-10-01T12:15:00Z,800,250,0,120,1,sk-ant-example,example-anthropic-usage-001
+anthropic,claude-3-5-haiku,2026-10-01T12:30:00Z,1500,400,200,0,1,sk-ant-example,example-anthropic-usage-002
+google,gemini-1.5-flash,2026-10-01T12:45:00Z,2000,500,500,0,1,aiza-example,example-google-usage-001

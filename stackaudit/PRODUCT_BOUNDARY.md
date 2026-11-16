@@ -24,7 +24,7 @@ Keep the intelligence engine and self-hosted completeness real. Hosted can charg
 | Capability | OSS recommendation | Hosted recommendation | Current implementation |
 |---|---|---|---|
 | Provider integrations | Keep adapters and sync support open | Managed scheduled sync as convenience | CSV is the V0 import path; provider adapters are library primitives with no credential or sync workflow |
-| CSV usage ingestion | Keep full import path open | Assisted imports only | Parser exists; no import UI/API |
+| CSV usage ingestion | Keep full import path open | Assisted imports only | Fully implemented for V0; in-app CSV upload UI and POST /api/v1/usage/import persist records with deduplication, pricing calculation, and workspace scoping |
 | Pricing catalog | Keep schema, lookup, and community data open | Maintained catalog feed/updates can be convenience | Effective dates supported; no rows/curation pipeline in migrations |
 | Deterministic cost calculation | Keep fully open | Same engine | Implemented with decimal arithmetic; verify end-to-end |
 | Workload attribution | Keep core rules open | Managed mapping assistance | API-key rules exist; no rich mapping UI or client dimension |
@@ -41,7 +41,7 @@ Keep the intelligence engine and self-hosted completeness real. Hosted can charg
 | Managed database | Self-host DB remains supported | Hosted infrastructure | Not present |
 | Secret storage | Self-host secret manager integrations stay open | Managed encrypted storage/rotation convenience | Webhook encryption helper; provider credential store absent |
 | Advanced analytics/forecasting | Defer | Consider paid after demand evidence | Forecasting absent |
-| CI cost checks | Keep CLI/action core open | Hosted baselines/history convenience | Not present |
+| CI cost checks | Keep CLI/action core open | Hosted baselines/history convenience | Application CI is implemented in .github/workflows/ci.yml; PR spend-check CLI action is deferred |
 | Public API | Keep core API open | Higher reliability/support may be paid | Partial REST routes; no OpenAPI |
 | MCP integration | Defer until workflows and demand clear | Could be available to hosted accounts too | Not present |
 | Enterprise auth/SSO | Open standards integrations where feasible | Managed configuration/support | Not present |
@@ -53,11 +53,11 @@ Keep the intelligence engine and self-hosted completeness real. Hosted can charg
 
 ### Individual developer
 
-1. Discover via GitHub README/demo. Current README positions a self-hostable app; no live demo/screenshots are evident.
+1. Discover via GitHub README/demo. Current README positions a self-hostable app with SVG dashboard preview and verifiable setup sequence.
 2. Clone `stackaudit/`, install Node/npm dependencies, create `.env.local`, start Supabase, reset migrations.
 3. Manually load pricing records because a fresh migration leaves catalog empty; then `npm run seed`, `npm run dev`.
 4. For demo browsing, the local server requires `STACKAUDIT_WORKSPACE_ORG_ID` and verifies that organization exists. It never selects an organization implicitly. Do not expose this server.
-5. To use real data today, there is no in-app credential connection or CSV upload. A developer needs custom code calling core services or direct database/API work. Provider admin usage credentials are external and not automatically requested by the UI.
+5. To use real data today, CSV upload is supported directly in the dashboard UI (`/usage`) and via `POST /api/v1/usage/import` with file validation, unpriced row detection, and idempotency. Direct provider API credential synchronization remains a library primitive.
 6. Create workloads and API-key rules using app/API; manually send outcomes with `POST /api/v1/outcomes`. The current event means a caller-reported type/count/time, not verified successful or high-quality output.
 7. Inspect available cost/audit views, interpreting CPO only for a complete matched workload/time/outcome scope. A plain usage list page reads the API, which itself requires local fallback or bearer auth.
 
@@ -66,7 +66,7 @@ Keep the intelligence engine and self-hosted completeness real. Hosted can charg
 ### AI startup engineering team
 
 1. Deploy privately with Supabase and Next.js. Current app is not safe for shared/production use because of service-role access, no RLS, incomplete identity/membership, and development fallback.
-2. In a future supported path, configure read-only organization usage credentials or import provider exports; today neither is wired to a user flow. CSV parsing alone does not persist data.
+2. In a future supported path, configure read-only organization usage credentials or import provider exports. Today, CSV import persists records into the database with deduplication and unpriced state tracking; direct provider API syncing is not yet wired to a UI flow.
 3. Define workloads and route usage identifiers/API keys to them. Attribution is API-key rule based; ambiguous/unmatched usage can remain unallocated.
 4. Emit outcomes using an idempotency key, type, count, time, and metadata. Teams need to define event meaning and separately ensure retries, reopened work, quality and human work are accounted for; current schema cannot represent them explicitly.
 5. Compare workload cost/outcome aggregates; use audits for changes in the same evidence windows. A full workload cost divided by each outcome type is not a partition if several types exist.
@@ -99,7 +99,7 @@ Make a local-only experience that starts from clean checkout and reaches a real 
 1. `docker compose up` (or documented Supabase CLI path), with locked, versioned sample pricing fixtures.
 2. One explicit demo seed command that works from empty schema, reports records and known/unpriced totals, and is safe/idempotent.
 3. `npm run dev` opens the demo dashboard with the explicitly configured workspace, never an implicit organization selection.
-4. A second path imports a documented canonical CSV through an API/CLI, previews parse/pricing/attribution failures, then commits idempotently.
+4. A second path imports a documented canonical CSV through the UI or `POST /api/v1/usage/import`, previews parse/pricing/attribution failures, then commits idempotently.
 5. A minimal workload/outcome example shows how to send an event and says what is and is not measured.
 
 First meaningful real-data result must not be promised in a time band yet. The integration currently requires custom work; time-to-first-value needs observed user tests after import/sync is implemented.

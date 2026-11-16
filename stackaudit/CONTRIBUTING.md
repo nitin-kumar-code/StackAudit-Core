@@ -23,8 +23,8 @@ All contributors and participants are expected to adhere to our [Code of Conduct
 ### 1. Fork and Clone
 
 ```bash
-git clone https://github.com/<your-username>/Ai-spend-audit.git
-cd Ai-spend-audit/stackaudit
+git clone https://github.com/<your-username>/StackAudit-Core.git
+cd StackAudit-Core/stackaudit
 ```
 
 ### 2. Install Dependencies
@@ -105,6 +105,12 @@ To ensure mathematical precision, security, and maintainability across the codeb
 - ESLint: Ensure no warnings or errors remain before submitting.
 - Component styling: Built on Tailwind CSS and shadcn/ui primitives.
 
+### 5. AI-Assisted Contributions
+AI coding assistants (e.g. Claude Code, Copilot, ChatGPT, Cursor, Antigravity) are welcomed, provided contributions meet our standard criteria:
+- **Human Accountability**: You remain fully responsible for understanding, explaining, and testing all submitted code.
+- **Verification**: All PRs must include passing tests (`npm test` and `npm run test:integration` where applicable) and adhere to our financial decimal precision standards (`big.js`).
+- **Disclosure**: In your pull request description, please note if and which AI tools were used during creation.
+
 ---
 
 ## Verification & Testing
@@ -142,6 +148,6 @@ npm run build             # Verify Next.js production build succeeds
 
 ## Community & Questions
 
-- Have a question or idea? Open a [GitHub Discussion](https://github.com/nitin-kumar-code/Ai-spend-audit/discussions).
+- Have a question or idea? Open a [GitHub Discussion](https://github.com/nitin-kumar-code/StackAudit-Core/discussions).
 - Found a bug? File a detailed report using the [Bug Report Template](.github/ISSUE_TEMPLATE/bug_report.yml).
 - Security concerns? Please follow [SECURITY.md](SECURITY.md) for private reporting.

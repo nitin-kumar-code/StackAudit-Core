@@ -89,11 +89,12 @@ describe('Pricing Fixture Loading Engine (loadPricingFixtures)', () => {
       })
     } as unknown as SupabaseClient;
 
+    const fixtureFile = readDefaultFixtureFile();
     const result = await loadPricingFixtures(mockSupabase);
-    expect(result.inserted).toBe(7);
+    expect(result.inserted).toBe(fixtureFile.records.length);
     expect(result.updated).toBe(0);
     expect(result.skipped).toBe(0);
-    expect(insertedRows.length).toBe(7);
+    expect(insertedRows.length).toBe(fixtureFile.records.length);
     expect(insertedRows.every(r => String(r.source).startsWith('sample-reference:'))).toBe(true);
   });
 

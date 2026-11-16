@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security Vulnerability Reporting
-    url: https://github.com/nitin-kumar-code/Ai-spend-audit/blob/main/SECURITY.md
+    url: https://github.com/nitin-kumar-code/StackAudit-Core/blob/main/SECURITY.md
     about: Please report security vulnerabilities privately according to our security policy.
   - name: GitHub Discussions & Community
-    url: https://github.com/nitin-kumar-code/Ai-spend-audit/discussions
+    url: https://github.com/nitin-kumar-code/StackAudit-Core/discussions
     about: Ask questions, share ideas, and discuss AI cost engineering with the community.

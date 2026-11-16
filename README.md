@@ -15,7 +15,7 @@
   <b>StackAudit</b> is an open-source AI Cost Intelligence platform that helps engineering teams track AI API usage, attribute spending to workloads, and understand the cost of producing meaningful outcomes.
 </p>
 
-[Quick Start](#quick-start-under-3-minutes) · [Documentation](docs/) · [How It Works](#how-it-works) · [Feature Matrix](#core-capabilities) · [Report a Bug](https://github.com/nitin-kumar-code/Ai-spend-audit/issues/new/choose) · [Contribute](CONTRIBUTING.md)
+[Quick Start](#quick-start-under-3-minutes) · [Documentation](docs/) · [How It Works](#how-it-works) · [Feature Matrix](#core-capabilities) · [Report a Bug](https://github.com/nitin-kumar-code/StackAudit-Core/issues/new/choose) · [Contribute](CONTRIBUTING.md)
 
 </div>
 
@@ -48,31 +48,15 @@ Instead of looking at AI spending as one large invoice at the end of the month, 
 
 ## Product Preview
 
-```text
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│  STACKAUDIT  │  Dashboard  ·  Usage  ·  Workloads  ·  Outcomes  ·  Audits  ·  Alerts   │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                        │
-│   TOTAL SPEND (30D)       TOTAL TOKENS            ACTIVE WORKLOADS      OPEN ALERTS    │
-│   $1,482.35               412.8M                  6 Active              2 Requiring    │
-│   ▲ +14.2% vs prev        (48.2% Cached)          100% Attributed       Attention      │
-│                                                                                        │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│  DAILY SPEND TREND                                 WORKLOAD ATTRIBUTION                │
-│  $ │              ╭───╮                            ┌────────────────────────────────┐  │
-│    │        ╭─────╯   ╰───╮                        │ ■ Support Copilot      42.5%   │  │
-│    │  ╭─────╯             ╰──────                  │ ■ Document Extraction  31.2%   │  │
-│    │──╯                                            │ ■ Code Review Agent    18.1%   │  │
-│    └─────────────────────────────                  │ ■ Other Workloads       8.2%   │  │
-│                                                    └────────────────────────────────┘  │
-├────────────────────────────────────────────────────────────────────────────────────────┤
-│  UNIT ECONOMICS (COST PER OUTCOME)                                                     │
-│  Workload               Outcome Metric            Volume        Cost / Outcome         │
-│  Support Copilot        Resolved Tickets          8,420         $0.075 / ticket        │
-│  Doc Extraction         Processed Invoices        14,100        $0.033 / document      │
-│  Code Review Agent      Reviewed PRs              1,240         $0.216 / review        │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
+![StackAudit AI Cost Intelligence Dashboard](docs/images/dashboard-preview.svg)
+
+| Metric / Dimension | Sample Value | Attribution / Heuristic Context |
+| :--- | :--- | :--- |
+| **Total AI Spend (30D)** | **$1,482.35** | Bounded 30-day window; calculated with `big.js` arbitrary precision. |
+| **Token Consumption** | **412.8M tokens** | 48.2% prompt cache hit rate across Anthropic & OpenAI workloads. |
+| **Cost Per Outcome (CPO)** | **$0.042 / outcome** | Primary metric: Customer Support Copilot (`ticket_resolved`). |
+| **Attributed Workloads** | **100% Attributed** | Support Copilot (42.5%), Document Extraction (31.2%), Code Review Agent (18.1%). |
+| **Active Anomalies** | **2 Requiring Attention** | 1 High Severity (`COST_DRIFT`), 1 Medium Severity (`EFFICIENCY`). |
 
 ---
 
@@ -141,8 +125,8 @@ Follow this sequence to set up a clean, fully populated instance on your machine
 ### 1. Clone and Install Dependencies
 
 ```bash
-git clone https://github.com/nitin-kumar-code/Ai-spend-audit.git
-cd Ai-spend-audit/stackaudit
+git clone https://github.com/nitin-kumar-code/StackAudit-Core.git
+cd StackAudit-Core/stackaudit
 npm ci
 ```
 
@@ -234,6 +218,12 @@ We welcome contributions from the community! Whether you are reporting a bug, pr
 - 🤝 **[Contributing Guidelines](CONTRIBUTING.md)**
 - 📜 **[Code of Conduct](CODE_OF_CONDUCT.md)**
 - 🔒 **[Security Policy](SECURITY.md)**
+
+---
+
+## AI Assistance Disclosure
+
+In the spirit of transparency: portions of StackAudit—including architectural documentation, test suites, reference pricing fixtures, and security hardening—were developed with the assistance of AI engineering tools (Claude Code and Google Antigravity). All AI-assisted contributions are architected, audited, verified against automated test suites, and reviewed by human engineers.
 
 ---
 

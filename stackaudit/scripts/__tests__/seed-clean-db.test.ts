@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { loadPricingFixtures } from '../load-pricing-fixtures';
+import { loadPricingFixtures, readDefaultFixtureFile } from '../load-pricing-fixtures';
 
 interface DbRow {
   id: string;
@@ -124,15 +124,16 @@ describe('Clean Database Seeding Workflow & Idempotency', () => {
     expect(db.pricing_catalog.length).toBe(0);
 
     // 2. Load pricing fixtures on clean DB
+    const expectedCount = readDefaultFixtureFile().records.length;
     const fixtureResult = await loadPricingFixtures(supabase);
-    expect(fixtureResult.inserted).toBe(7);
-    expect(db.pricing_catalog.length).toBe(7);
+    expect(fixtureResult.inserted).toBe(expectedCount);
+    expect(db.pricing_catalog.length).toBe(expectedCount);
 
     // 3. Repeated loading is idempotent
     const rerunFixtureResult = await loadPricingFixtures(supabase);
     expect(rerunFixtureResult.inserted).toBe(0);
-    expect(rerunFixtureResult.updated).toBe(7);
-    expect(db.pricing_catalog.length).toBe(7);
+    expect(rerunFixtureResult.updated).toBe(expectedCount);
+    expect(db.pricing_catalog.length).toBe(expectedCount);
 
     // 4. Manual record is protected
     db.pricing_catalog.push({

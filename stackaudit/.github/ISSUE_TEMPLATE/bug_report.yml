@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         Thank you for reporting an issue! Please verify that you are running the latest version of StackAudit.
-        **Important:** If this is a security vulnerability, please do NOT file a public issue. Follow [SECURITY.md](https://github.com/nitin-kumar-code/Ai-spend-audit/blob/main/SECURITY.md) instead.
+        **Important:** If this is a security vulnerability, please do NOT file a public issue. Follow [SECURITY.md](https://github.com/nitin-kumar-code/StackAudit-Core/blob/main/SECURITY.md) instead.
 
   - type: textarea
     id: description

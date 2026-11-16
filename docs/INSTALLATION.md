@@ -25,8 +25,8 @@ Before installing StackAudit, ensure your system has the following tools install
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/nitin-kumar-code/Ai-spend-audit.git
-cd Ai-spend-audit/stackaudit
+git clone https://github.com/nitin-kumar-code/StackAudit-Core.git
+cd StackAudit-Core/stackaudit
 ```
 
 > [!IMPORTANT]
@@ -147,7 +147,7 @@ npm run test:integration
 
 ### `ETIMEDOUT` or `Operation timed out` on macOS
 - **Cause**: Project placed inside `~/Documents` or `~/Desktop` with iCloud Drive sync active, causing files to become "dataless" placeholders.
-- **Fix**: Move the repository to a non-synced folder (e.g. `~/Development/Ai-spend-audit`) and ensure free disk space > 10 GB.
+- **Fix**: Move the repository to a non-synced folder (e.g. `~/Development/StackAudit-Core`) and ensure free disk space > 10 GB.
 
 ### `The pricing catalog has no OpenAI or Anthropic records`
 - **Cause**: Setup ran without loading the reference pricing catalog.
