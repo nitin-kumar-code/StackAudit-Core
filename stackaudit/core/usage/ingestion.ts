@@ -5,21 +5,33 @@ import { IPricingCatalog, calculateCost, PricingNotFoundError, IncompletePricing
 export interface IngestionResult {
   totalProcessed: number;
   successful: number;
+  insertedEventIds: string[];
+  conflictEventIds: string[];
   pricingFailed: number;
+  pricingFailedEventIds: string[];
   pricingFailedEvents: Array<{ provider: string; model: string; timestamp: Date; error: string }>;
   errors: Error[];
+}
+
+export interface IngestionOptions {
+  /** Ignore unique-key conflicts and report only rows inserted by this call. */
+  conflictHandling?: 'upsert' | 'ignore';
 }
 
 export async function ingestUsageEvents(
   events: CanonicalUsageEvent[],
   organizationId: string,
   pricingCatalog: IPricingCatalog,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  options: IngestionOptions = {}
 ): Promise<IngestionResult> {
   const result: IngestionResult = {
     totalProcessed: events.length,
     successful: 0,
+    insertedEventIds: [],
+    conflictEventIds: [],
     pricingFailed: 0,
+    pricingFailedEventIds: [],
     pricingFailedEvents: [],
     errors: []
   };
@@ -43,6 +55,7 @@ export async function ingestUsageEvents(
     } catch (error) {
       if (error instanceof PricingNotFoundError || error instanceof IncompletePricingError) {
         result.pricingFailed++;
+        result.pricingFailedEventIds.push(event.id);
         isUnpriced = true;
         result.pricingFailedEvents.push({
           provider: event.provider,
@@ -77,17 +90,30 @@ export async function ingestUsageEvents(
   }
 
   if (recordsToInsert.length > 0) {
-    // True upsert overwrites aggregated values safely
-    const { error } = await supabase
+    const ignoreConflicts = options.conflictHandling === 'ignore';
+    const write = supabase
       .from('usage_events')
-      .upsert(recordsToInsert, { 
-        onConflict: 'organization_id,provider,provider_reference'
+      .upsert(recordsToInsert, {
+        onConflict: 'organization_id,provider,provider_reference',
+        ...(ignoreConflicts ? { ignoreDuplicates: true } : {})
       });
 
-    if (error) {
-      result.errors.push(new Error(`Database insert failed: ${error.message}`));
+    if (ignoreConflicts) {
+      const { data, error } = await write.select('id');
+      if (error) {
+        result.errors.push(new Error(`Database insert failed: ${error.message}`));
+      } else {
+        result.insertedEventIds = (data || []).map(row => row.id);
+        result.successful = result.insertedEventIds.length;
+        const insertedIds = new Set(result.insertedEventIds);
+        result.conflictEventIds = recordsToInsert
+          .map(record => record.id)
+          .filter(id => !insertedIds.has(id));
+      }
     } else {
-      result.successful = recordsToInsert.length;
+      const { error } = await write;
+      if (error) result.errors.push(new Error(`Database insert failed: ${error.message}`));
+      else result.successful = recordsToInsert.length;
     }
   }
 

@@ -8,22 +8,29 @@ interface WorkloadRow { id: string; name: string; description: string | null }
 export default function WorkloadsPage() {
   const [workloads, setWorkloads] = useState<WorkloadRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function fetchWorkloads() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/workloads');
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const b = await res.json(); if (b.error) msg = b.error; } catch {}
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      setWorkloads(data.workloads || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load workloads.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function fetchWorkloads() {
-      try {
-        const res = await fetch('/api/v1/workloads');
-        if (res.ok) {
-          const data = await res.json();
-          setWorkloads(data.workloads || []);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchWorkloads();
+    void fetchWorkloads();
   }, []);
 
   if (loading) return <div className="p-8 text-muted-foreground">Loading workloads...</div>;
@@ -38,7 +45,14 @@ export default function WorkloadsPage() {
         </button>
       </div>
 
-      {workloads.length === 0 ? (
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <span>Failed to load workloads: {error}</span>
+          <button className="rounded-md border border-red-300 px-3 py-1.5 font-medium hover:bg-red-100" onClick={() => void fetchWorkloads()}>Retry</button>
+        </div>
+      )}
+
+      {!error && workloads.length === 0 ? (
         <div className="border border-dashed rounded-lg p-12 text-center text-muted-foreground bg-card">
           <Activity className="w-8 h-8 mx-auto mb-4 text-gray-400" />
           <h3 className="text-lg font-medium text-foreground mb-1">No workloads configured yet</h3>

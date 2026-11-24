@@ -7,39 +7,29 @@ interface FindingRow { severity: string; category: string; workloadId?: string |
 export default function AuditsPage() {
   const [findings, setFindings] = useState<FindingRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
   async function loadFindings() {
+    setError(null);
     try {
       const res = await fetch(`/api/v1/audits`);
-      if (res.ok) {
-        const data = await res.json();
-        setFindings(data.findings || []);
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const b = await res.json(); if (b.error) msg = b.error; } catch {}
+        throw new Error(msg);
       }
+      const data = await res.json();
+      setFindings(data.findings || []);
     } catch (err) {
-      console.error(err);
+      setError(err instanceof Error ? err.message : 'Could not load audit findings.');
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    let active = true;
-    async function loadInitialFindings() {
-      try {
-        const res = await fetch('/api/v1/audits');
-        if (res.ok) {
-          const data = await res.json();
-          if (active) setFindings(data.findings || []);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    void loadInitialFindings();
-    return () => { active = false; };
+    void loadFindings();
   }, []);
 
   async function handleRunAudit() {
@@ -67,7 +57,14 @@ export default function AuditsPage() {
         </button>
       </div>
 
-      {findings.length === 0 ? (
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <span>Failed to load audit findings: {error}</span>
+          <button className="rounded-md border border-red-300 px-3 py-1.5 font-medium hover:bg-red-100" onClick={() => { setLoading(true); void loadFindings(); }}>Retry</button>
+        </div>
+      )}
+
+      {!error && findings.length === 0 ? (
         <div className="border border-dashed rounded-lg p-12 text-center text-muted-foreground bg-card">
           <ShieldAlert className="w-8 h-8 mx-auto mb-4 text-muted-foreground/50" />
           <h3 className="text-lg font-medium text-foreground mb-1">No findings</h3>

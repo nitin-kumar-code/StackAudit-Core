@@ -8,6 +8,7 @@ import { PricingRecord } from '../../../../../core/types';
 
 export const runtime = 'nodejs';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_MULTIPART_BODY_BYTES = MAX_FILE_BYTES + 128 * 1024;
 const MAX_ROWS = 10_000;
 const CHUNK_SIZE = 500;
 class ImportInfrastructureError extends Error {}
@@ -15,7 +16,41 @@ class ImportInfrastructureError extends Error {}
 export async function POST(req: Request) {
   try {
     const orgId = await getAuthOrgId(req);
-    const form = await req.formData();
+    const contentType = req.headers.get('content-type') || '';
+    if (!/^multipart\/form-data(?:\s*;|$)/i.test(contentType)) {
+      return NextResponse.json({ error: 'Upload a CSV file as multipart form data.' }, { status: 400 });
+    }
+
+    const contentLength = req.headers.get('content-length');
+    if (contentLength !== null) {
+      const normalizedLength = contentLength.trim();
+      if (!/^\d+$/.test(normalizedLength)) {
+        return NextResponse.json({ error: 'Invalid request content length.' }, { status: 400 });
+      }
+      if (Number(normalizedLength) > MAX_MULTIPART_BODY_BYTES) {
+        return NextResponse.json({ error: 'Upload is too large. CSV files must be 5 MB or smaller.' }, { status: 413 });
+      }
+    }
+
+    // Bound the raw stream before invoking the multipart parser. The small
+    // allowance covers the multipart boundary and headers around a 5 MiB file.
+    const reader = req.body?.getReader();
+    if (!reader) return NextResponse.json({ error: 'Upload a CSV file in the file field.' }, { status: 400 });
+    const chunks: Uint8Array[] = [];
+    let requestBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      requestBytes += value.byteLength;
+      if (requestBytes > MAX_MULTIPART_BODY_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return NextResponse.json({ error: 'Upload is too large. CSV files must be 5 MB or smaller.' }, { status: 413 });
+      }
+      chunks.push(value);
+    }
+
+    const boundedBody = Buffer.concat(chunks.map(chunk => Buffer.from(chunk)));
+    const form = await new Response(boundedBody, { headers: { 'content-type': contentType } }).formData();
     const file = form.get('file');
     if (!(file instanceof File)) return NextResponse.json({ error: 'Upload a CSV file in the file field.' }, { status: 400 });
     if (file.size > MAX_FILE_BYTES) return NextResponse.json({ error: 'CSV file must be 5 MB or smaller.' }, { status: 413 });
@@ -36,6 +71,9 @@ export async function POST(req: Request) {
       seen.add(key); return true;
     });
 
+    // This precheck avoids unnecessary work for references already present.
+    // The insert below remains authoritative and ignores conflicts atomically,
+    // covering imports that race after this query.
     const existingRefs = new Set<string>();
     for (const provider of [...new Set(unique.map(item => item.event.provider))]) {
       const refs = unique.filter(item => item.event.provider === provider).map(item => item.event.providerReference);
@@ -43,14 +81,15 @@ export async function POST(req: Request) {
         const { data, error } = await supabaseAdmin.from('usage_events')
           .select('provider,provider_reference').eq('organization_id', orgId).eq('provider', provider)
           .in('provider_reference', refs.slice(offset, offset + CHUNK_SIZE));
-      if (error) throw new ImportInfrastructureError('Could not check existing usage records.');
+        if (error) throw new ImportInfrastructureError('Could not check existing usage records.');
         for (const row of data || []) existingRefs.add(`${row.provider}\u0000${row.provider_reference}`);
       }
     }
 
     const fresh = unique.filter(({ event, row }) => {
       if (existingRefs.has(`${event.provider}\u0000${event.providerReference}`)) {
-        errors.push({ row, message: 'This provider_reference was already imported; skipped.' }); return false;
+        errors.push({ row, message: 'This provider_reference was already imported; skipped.' });
+        return false;
       }
       return true;
     });
@@ -66,19 +105,28 @@ export async function POST(req: Request) {
     })));
 
     let imported = 0, unpriced = 0;
+    let duplicates = parsed.events.length - fresh.length;
     const failures: Array<{ row: number; message: string }> = [];
     for (let offset = 0; offset < fresh.length; offset += CHUNK_SIZE) {
-      const batch = fresh.slice(offset, offset + CHUNK_SIZE).map(item => item.event);
-      const result = await ingestUsageEvents(batch, orgId, catalog, supabaseAdmin);
+      const batchRows = fresh.slice(offset, offset + CHUNK_SIZE);
+      const batch = batchRows.map(item => item.event);
+      const result = await ingestUsageEvents(batch, orgId, catalog, supabaseAdmin, { conflictHandling: 'ignore' });
       imported += result.successful;
-      unpriced += result.pricingFailed;
-      if (result.errors.length) {
-        for (const item of fresh.slice(offset, offset + CHUNK_SIZE)) {
-          failures.push({ row: item.row, message: 'Database could not save this batch; retry the import after resolving the database error.' });
+      const insertedEventIds = result.insertedEventIds ?? batch.slice(0, result.successful).map(event => event.id);
+      const insertedIds = new Set(insertedEventIds);
+      const unpricedIds = new Set(result.pricingFailedEventIds ?? []);
+      unpriced += insertedEventIds.filter(id => unpricedIds.has(id)).length;
+
+      for (const item of batchRows) {
+        if (insertedIds.has(item.event.id)) continue;
+        if ((result.conflictEventIds ?? []).includes(item.event.id)) {
+          duplicates++;
+          errors.push({ row: item.row, message: 'This provider_reference was already imported; skipped.' });
+        } else {
+          failures.push({ row: item.row, message: 'This row could not be imported; resolve the processing or database issue and retry.' });
         }
       }
     }
-    const duplicates = Math.max(0, parsed.events.length - fresh.length);
     return NextResponse.json({
       validated: parsed.events.length,
       accepted: imported,

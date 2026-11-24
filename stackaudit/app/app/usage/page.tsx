@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Database, ChevronLeft, ChevronRight, Activity, Zap, DollarSign } from 'lucide-react';
+import Big from 'big.js';
 
 interface UsageEventRow { id: string; timestamp: string; provider: string; model: string; input_tokens: number | null; output_tokens: number | null; request_count: number | null; calculated_cost: string | null; workload_name?: string | null; is_unpriced?: boolean }
 interface WorkloadOption { id: string; name: string }
@@ -14,8 +15,35 @@ function formatNumber(num: number) {
   return num.toString();
 }
 
-function formatCurrency(val: number) {
-  return '$' + val.toFixed(2);
+function formatCurrency(value: string | null) {
+  if (value === null) return 'Unavailable';
+  try {
+    const amount = new Big(value);
+    const fixed = amount.abs().toFixed(Math.max(2, amount.dp()));
+    const [integer, fraction] = fixed.split('.');
+    const groupedInteger = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return `${amount.lt(0) ? '-' : ''}$${groupedInteger}.${fraction}`;
+  } catch {
+    return 'Unavailable';
+  }
+}
+
+function exceedsCostThreshold(value: string | null, threshold: string) {
+  try {
+    return new Big(value ?? '0').gt(threshold);
+  } catch {
+    return false;
+  }
+}
+
+async function responseError(response: Response, fallback: string) {
+  try {
+    const body = await response.json();
+    if (typeof body.error === 'string') return body.error;
+  } catch {
+    // Use the fallback when the server did not return JSON.
+  }
+  return `${fallback} (HTTP ${response.status})`;
 }
 
 function UsageContent() {
@@ -28,6 +56,8 @@ function UsageContent() {
   const [filterOptions, setFilterOptions] = useState<{ providers: string[]; models: string[]; workloads: WorkloadOption[] }>({ providers: [], models: [], workloads: [] });
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadSequence, setReloadSequence] = useState(0);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const [importErrors, setImportErrors] = useState<Array<{ row: number; message: string }>>([]);
@@ -38,8 +68,8 @@ function UsageContent() {
     try {
       const form = new FormData(); form.append('file', file);
       const response = await fetch('/api/v1/usage/import', { method: 'POST', body: form });
+      if (!response.ok && response.status !== 207) throw new Error(await responseError(response, 'CSV import failed'));
       const result = await response.json();
-      if (!response.ok && response.status !== 207) throw new Error(result.error || 'CSV import failed.');
       setImportMessage(`${result.message} ${result.accepted} accepted/imported, ${result.rejected} rejected, ${result.duplicates} duplicates skipped.`);
       setImportErrors(result.errors || []);
       if (result.imported > 0) router.refresh();
@@ -66,8 +96,10 @@ function UsageContent() {
   };
 
   useEffect(() => {
+    let active = true;
     async function loadUsage() {
       setLoading(true);
+      setLoadError(null);
       try {
         let days = 90;
         if (range === '24h') days = 1;
@@ -89,21 +121,25 @@ function UsageContent() {
         if (workloadId !== 'all') query.set('workloadId', workloadId);
 
         const res = await fetch(`/api/v1/usage?${query.toString()}`);
-        if (res.ok) {
-          const data = await res.json();
-          setEvents(data.events || []);
-          setSummary(data.summary || { totalRequests: 0, totalTokens: 0, totalCost: null, knownCost: '0', isCostComplete: true, unpricedEventCount: 0, totalEvents: 0 });
-          setFilterOptions(data.filters || { providers: [], models: [], workloads: [] });
-          setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
-        }
+        if (!res.ok) throw new Error(await responseError(res, 'Could not load usage data'));
+        const data = await res.json();
+        if (!active) return;
+        setEvents(data.events || []);
+        setSummary(data.summary || { totalRequests: 0, totalTokens: 0, totalCost: null, knownCost: '0', isCostComplete: true, unpricedEventCount: 0, totalEvents: 0 });
+        setFilterOptions(data.filters || { providers: [], models: [], workloads: [] });
+        setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
       } catch (err) {
-        console.error(err);
+        if (active) {
+          setEvents([]);
+          setLoadError(err instanceof Error ? err.message : 'Could not load usage data. Please try again.');
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
     loadUsage();
-  }, [range, provider, model, workloadId, pageParam]);
+    return () => { active = false; };
+  }, [range, provider, model, workloadId, pageParam, reloadSequence]);
 
   return (
     <div className="space-y-6 max-w-[1200px] w-full">
@@ -157,6 +193,11 @@ function UsageContent() {
         </div>
       </div>
 
+      {loadError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <span>Usage data could not be loaded: {loadError}</span>
+        <button className="rounded-md border border-red-300 px-3 py-1.5 font-medium hover:bg-red-100" onClick={() => setReloadSequence(sequence => sequence + 1)}>Retry</button>
+      </div>}
+
       <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Import usage CSV</h2>
@@ -190,7 +231,7 @@ function UsageContent() {
             <h3 className="text-sm font-medium">Total Requests</h3>
           </div>
           <div className="text-2xl font-semibold text-gray-900">
-            {loading ? '-' : formatNumber(summary.totalRequests)}
+            {loading || loadError ? '-' : formatNumber(summary.totalRequests)}
           </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm flex flex-col justify-center">
@@ -199,7 +240,7 @@ function UsageContent() {
             <h3 className="text-sm font-medium">Total Tokens</h3>
           </div>
           <div className="text-2xl font-semibold text-gray-900">
-            {loading ? '-' : formatNumber(summary.totalTokens)}
+            {loading || loadError ? '-' : formatNumber(summary.totalTokens)}
           </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm flex flex-col justify-center">
@@ -208,7 +249,7 @@ function UsageContent() {
             <h3 className="text-sm font-medium">Total Cost</h3>
           </div>
           <div className="text-2xl font-semibold text-gray-900">
-            {loading ? '-' : summary.totalCost !== null ? formatCurrency(Number(summary.totalCost)) : summary.knownCost !== null ? `${formatCurrency(Number(summary.knownCost))} partial` : 'Unavailable'}
+            {loading || loadError ? '-' : summary.totalCost !== null ? formatCurrency(summary.totalCost) : summary.knownCost !== null ? `${formatCurrency(summary.knownCost)} partial` : 'Unavailable'}
           </div>
           {!loading && !summary.isCostComplete && <div className="text-xs text-amber-700 mt-1">{summary.unpricedEventCount} events have unknown pricing</div>}
         </div>
@@ -218,7 +259,7 @@ function UsageContent() {
         <div className="flex items-center justify-center h-64 text-sm text-gray-400 border border-gray-200 rounded-xl bg-white shadow-sm">
           Loading usage events...
         </div>
-      ) : events.length === 0 ? (
+      ) : loadError ? null : events.length === 0 ? (
         <div className="rounded-xl border border-gray-200 bg-white p-12 text-center shadow-sm">
           <Database className="w-8 h-8 mx-auto mb-4 text-gray-400" />
           <h3 className="text-sm font-semibold text-gray-900 mb-1">No usage data</h3>
@@ -240,7 +281,7 @@ function UsageContent() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">
                 {events.map((e, idx) => {
-                  const isAnomaly = !e.is_unpriced && (e.request_count ?? 1) > 1000 && parseFloat(e.calculated_cost ?? '0') > 5.0;
+                  const isAnomaly = !e.is_unpriced && (e.request_count ?? 1) > 1000 && exceedsCostThreshold(e.calculated_cost, '5');
                   return (
                     <tr key={idx} className="hover:bg-gray-50/50 transition-colors group">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -269,7 +310,7 @@ function UsageContent() {
                         <span className={`text-sm font-mono ${isAnomaly ? 'text-rose-600 font-medium bg-rose-50 px-2 py-1 rounded-md' : 'text-gray-900'}`}>
                           {e.is_unpriced
                             ? <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 font-sans text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200" title="No matching price was found; zero is a placeholder, not the event cost.">Unpriced</span>
-                            : formatCurrency(parseFloat(e.calculated_cost ?? '0'))}
+                            : formatCurrency(e.calculated_cost ?? '0')}
                         </span>
                       </td>
                     </tr>
